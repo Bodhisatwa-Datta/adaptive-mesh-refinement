@@ -49,7 +49,7 @@ def main() -> None:
     plot_hierarchy_1d(hierarchy, axes[1])
     figure.tight_layout()
 
-    output = ROOT / "figures" / "phase2_static_hierarchy.png"
+    output = ROOT / "figures" / "gradient_selected_amr_hierarchy.png"
     output.parent.mkdir(parents=True, exist_ok=True)
     figure.savefig(output, dpi=180)
     plt.close(figure)
@@ -63,4 +63,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

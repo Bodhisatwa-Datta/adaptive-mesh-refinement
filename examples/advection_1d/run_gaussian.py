@@ -1,4 +1,4 @@
-"""Run and plot the Phase 1 Gaussian-advection validation benchmark."""
+"""Run and plot the Gaussian-advection validation benchmark."""
 
 from __future__ import annotations
 
@@ -85,11 +85,11 @@ def main() -> None:
     axes[1].legend()
     axes[1].grid(which="both", alpha=0.25)
     figure.tight_layout()
-    figure.savefig(figure_directory / "phase1_gaussian_advection.png", dpi=180)
+    figure.savefig(figure_directory / "gaussian_advection_convergence.png", dpi=180)
     plt.close(figure)
 
     print(f"Wrote {csv_path.relative_to(ROOT)}")
-    print(f"Wrote {(figure_directory / 'phase1_gaussian_advection.png').relative_to(ROOT)}")
+    print(f"Wrote {(figure_directory / 'gaussian_advection_convergence.png').relative_to(ROOT)}")
     for n_cells, measured, rate in zip(resolutions, cases, rates):
         print(
             f"N={n_cells:4d}  L1={float(measured['l1']):.6e}  "

@@ -1,6 +1,6 @@
 # Numerical methods
 
-## Phase 1: one-dimensional linear advection
+## One-dimensional linear advection
 
 The implemented equation is
 
@@ -31,4 +31,3 @@ The last timestep is shortened so the requested final time is reached exactly.
 Periodic ghost cells provide the interface states at both physical boundaries. Because every flux enters one cell and leaves another, the discrete mass $\sum_i U_i\Delta x$ is conserved to roundoff.
 
 The method is deliberately first order. Its numerical diffusion is especially visible for discontinuous profiles; higher-order reconstruction is deferred until the uniform baseline is fully established.
-
