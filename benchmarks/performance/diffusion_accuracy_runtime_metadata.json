@@ -1,0 +1,15 @@
+{
+  "python": "3.12.13",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "numpy": "2.3.5",
+  "repeats": 15,
+  "sensitivity_repeats": 15,
+  "timer": "time.perf_counter",
+  "scope": "initialization, initial regrid, integration, and diagnostics; one untimed warm-up per case",
+  "diffusivity": 0.01,
+  "final_time": 0.05,
+  "stability_factor": 0.8,
+  "refinement_ratio": 2,
+  "state_interpretation": "analytical finite-volume cell averages",
+  "amr_prolongation": "conservative_quadratic"
+}

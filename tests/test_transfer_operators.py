@@ -3,6 +3,7 @@ import pytest
 
 from amr.refinement.prolongation import (
     prolong_conservative_linear,
+    prolong_conservative_quadratic,
     prolong_piecewise_constant,
 )
 from amr.refinement.restriction import restrict_cell_averages
@@ -53,3 +54,23 @@ def test_limited_linear_prolongation_creates_no_new_extrema() -> None:
     fine = prolong_conservative_linear(coarse, 2)
     assert np.min(fine) >= 0.0
     assert np.max(fine) <= 1.0
+
+
+@pytest.mark.parametrize("ratio", [2, 3, 4])
+def test_quadratic_prolongation_preserves_parent_averages(ratio: int) -> None:
+    coarse = np.array([0.4, 1.2, -0.3, 2.1, 0.8])
+    fine = prolong_conservative_quadratic(coarse, ratio)
+    np.testing.assert_allclose(fine.reshape(-1, ratio).mean(axis=1), coarse, atol=2.0e-15)
+
+
+def test_quadratic_prolongation_is_exact_for_quadratic_cell_averages() -> None:
+    ratio = 2
+    n_cells = 8
+    dx = 1.0 / n_cells
+    coarse_centres = (np.arange(n_cells, dtype=float) + 0.5) * dx
+    coarse = coarse_centres**2 + dx**2 / 12.0
+    fine = prolong_conservative_quadratic(coarse, ratio, periodic=False)
+    fine_dx = dx / ratio
+    fine_centres = (np.arange(n_cells * ratio, dtype=float) + 0.5) * fine_dx
+    expected = fine_centres**2 + fine_dx**2 / 12.0
+    np.testing.assert_allclose(fine, expected, atol=2.0e-15)

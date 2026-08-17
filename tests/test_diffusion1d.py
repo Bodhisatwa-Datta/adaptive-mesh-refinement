@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from amr.benchmarks.diffusion import periodic_gaussian_diffusion
+from amr.benchmarks.diffusion import periodic_gaussian_diffusion_cell_averages
 from amr.diagnostics.conservation import total_mass
 from amr.diagnostics.errors import error_norms
 from amr.grid.grid1d import UniformGrid1D
@@ -25,7 +25,7 @@ def test_zero_diffusivity_leaves_field_unchanged() -> None:
 
 def test_periodic_diffusion_conserves_mass() -> None:
     grid = UniformGrid1D(0.0, 1.0, 100)
-    initial = periodic_gaussian_diffusion(grid.cell_centres, 0.0, 0.01)
+    initial = periodic_gaussian_diffusion_cell_averages(grid.cell_edges, 0.0, 0.01)
     result = ExplicitDiffusion1D(grid, 0.01).solve(initial, 0.05)
     assert total_mass(result.values, grid) == pytest.approx(
         total_mass(initial, grid), abs=2.0e-14
@@ -38,13 +38,28 @@ def test_periodic_gaussian_converges_at_second_order() -> None:
     final_time = 0.05
     for n_cells in (50, 100, 200, 400):
         grid = UniformGrid1D(0.0, 1.0, n_cells)
-        initial = periodic_gaussian_diffusion(grid.cell_centres, 0.0, diffusivity)
+        initial = periodic_gaussian_diffusion_cell_averages(
+            grid.cell_edges, 0.0, diffusivity
+        )
         result = ExplicitDiffusion1D(grid, diffusivity).solve(initial, final_time)
-        exact = periodic_gaussian_diffusion(grid.cell_centres, final_time, diffusivity)
+        exact = periodic_gaussian_diffusion_cell_averages(
+            grid.cell_edges, final_time, diffusivity
+        )
         errors.append(error_norms(result.values, exact).l1)
     orders = np.log(np.asarray(errors[:-1]) / np.asarray(errors[1:])) / np.log(2.0)
     assert np.all(orders > 1.85)
     assert np.all(orders < 2.15)
+
+
+def test_periodic_gaussian_cell_average_mass_is_grid_independent() -> None:
+    masses = []
+    for n_cells in (16, 63, 256):
+        grid = UniformGrid1D(0.0, 1.0, n_cells)
+        averages = periodic_gaussian_diffusion_cell_averages(
+            grid.cell_edges, 0.05, 0.01
+        )
+        masses.append(total_mass(averages, grid))
+    np.testing.assert_allclose(masses, masses[0], atol=2.0e-15)
 
 
 def test_unstable_explicit_timestep_is_rejected() -> None:
@@ -62,4 +77,3 @@ def test_stable_update_obeys_discrete_maximum_principle() -> None:
     updated = solver.step(initial, solver.stable_timestep)
     assert np.min(updated) >= 0.0
     assert np.max(updated) <= 1.0
-

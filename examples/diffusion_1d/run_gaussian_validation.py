@@ -15,7 +15,10 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from amr.benchmarks.diffusion import periodic_gaussian_diffusion
+from amr.benchmarks.diffusion import (
+    periodic_gaussian_diffusion,
+    periodic_gaussian_diffusion_cell_averages,
+)
 from amr.diagnostics.conservation import total_mass
 from amr.diagnostics.errors import error_norms
 from amr.grid.grid1d import UniformGrid1D
@@ -28,11 +31,15 @@ FINAL_TIME = 0.05
 
 def run_case(n_cells: int) -> dict[str, object]:
     grid = UniformGrid1D(0.0, 1.0, n_cells)
-    initial = periodic_gaussian_diffusion(grid.cell_centres, 0.0, DIFFUSIVITY)
+    initial = periodic_gaussian_diffusion_cell_averages(
+        grid.cell_edges, 0.0, DIFFUSIVITY
+    )
     result = ExplicitDiffusion1D(grid, DIFFUSIVITY, stability_factor=0.8).solve(
         initial, FINAL_TIME
     )
-    exact = periodic_gaussian_diffusion(grid.cell_centres, FINAL_TIME, DIFFUSIVITY)
+    exact = periodic_gaussian_diffusion_cell_averages(
+        grid.cell_edges, FINAL_TIME, DIFFUSIVITY
+    )
     errors = error_norms(result.values, exact)
     return {
         "grid": grid,

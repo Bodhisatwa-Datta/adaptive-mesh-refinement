@@ -244,4 +244,3 @@ class AMRExplicitDiffusion1D:
             peak_stored_cells=peak_stored,
             regrid_events=tuple(events),
         )
-

@@ -15,8 +15,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from amr.benchmarks.diffusion import periodic_gaussian_diffusion
-from amr.diagnostics.errors import composite_error_norms, error_norms
+from amr.benchmarks.diffusion import (
+    periodic_gaussian_diffusion,
+    periodic_gaussian_diffusion_cell_averages,
+)
+from amr.diagnostics.errors import composite_cell_average_error_norms, error_norms
 from amr.diagnostics.plotting import plot_hierarchy_1d
 from amr.grid.grid1d import UniformGrid1D
 from amr.grid.hierarchy import AMRHierarchy1D
@@ -29,15 +32,19 @@ DIFFUSIVITY = 0.01
 FINAL_TIME = 0.05
 
 
-def exact(x: np.ndarray) -> np.ndarray:
+def exact_points(x: np.ndarray) -> np.ndarray:
     return periodic_gaussian_diffusion(x, FINAL_TIME, DIFFUSIVITY)
+
+
+def exact_averages(edges: np.ndarray, time: float = FINAL_TIME) -> np.ndarray:
+    return periodic_gaussian_diffusion_cell_averages(edges, time, DIFFUSIVITY)
 
 
 def uniform_case(n_cells: int) -> tuple[UniformGrid1D, np.ndarray, dict[str, float | int]]:
     grid = UniformGrid1D(0.0, 1.0, n_cells)
-    initial = periodic_gaussian_diffusion(grid.cell_centres, 0.0, DIFFUSIVITY)
+    initial = exact_averages(grid.cell_edges, 0.0)
     result = ExplicitDiffusion1D(grid, DIFFUSIVITY).solve(initial, FINAL_TIME)
-    errors = error_norms(result.values, exact(grid.cell_centres))
+    errors = error_norms(result.values, exact_averages(grid.cell_edges))
     return grid, result.values, {
         "active_cells": n_cells,
         "cell_updates": n_cells * result.n_steps,
@@ -69,14 +76,14 @@ def leaf_data(hierarchy: AMRHierarchy1D) -> tuple[np.ndarray, np.ndarray]:
 def main() -> None:
     coarse_grid, coarse_values, coarse = uniform_case(64)
     _, _, fine = uniform_case(128)
-    initial = periodic_gaussian_diffusion(coarse_grid.cell_centres, 0.0, DIFFUSIVITY)
+    initial = exact_averages(coarse_grid.cell_edges, 0.0)
     hierarchy = AMRHierarchy1D(coarse_grid, initial, refinement_ratio=2)
     config = GradientRegridConfig(
         1.0,
         0.5,
         n_buffer=4,
         merge_gap=4,
-        prolongation="conservative_linear",
+        prolongation="conservative_quadratic",
     )
     regrid_from_gradient(hierarchy, config)
     result = AMRExplicitDiffusion1D(
@@ -87,7 +94,7 @@ def main() -> None:
         subcycling=True,
         reflux=True,
     ).solve(FINAL_TIME)
-    errors = composite_error_norms(hierarchy, exact)
+    errors = composite_cell_average_error_norms(hierarchy, exact_averages)
     amr = {
         "active_cells": hierarchy.n_active_cells,
         "cell_updates": result.cell_updates,
@@ -117,7 +124,7 @@ def main() -> None:
     solution_ax = figure.add_subplot(grid_spec[0, 0])
     error_ax = figure.add_subplot(grid_spec[0, 1])
     hierarchy_ax = figure.add_subplot(grid_spec[1, :])
-    solution_ax.plot(plot_x, exact(plot_x), "k--", label="Analytical")
+    solution_ax.plot(plot_x, exact_points(plot_x), "k--", label="Analytical")
     solution_ax.plot(coarse_grid.cell_centres, coarse_values, color="tab:gray", label="Uniform N=64")
     solution_ax.plot(amr_x, amr_u, ".", color="tab:cyan", label="Dynamic AMR")
     solution_ax.set(xlabel="x", ylabel="u", title="Gaussian diffusion at t=0.05")

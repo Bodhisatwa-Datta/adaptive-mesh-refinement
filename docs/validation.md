@@ -91,14 +91,28 @@ The AMR solution remains within the initial range $[0.3,0.7]$, regridding change
 
 ## Periodic Gaussian diffusion
 
-`examples/diffusion_1d/run_gaussian_validation.py` evolves a periodic image-sum Gaussian with $D=0.01$ to $t=0.05$ and compares cell-centre values with the analytical broadened Gaussian. Resolutions 50, 100, 200, and 400 give measured $L_1$ errors $4.5593\times10^{-4}$, $1.1416\times10^{-4}$, $2.9152\times10^{-5}$, and $7.2649\times10^{-6}$. The successive observed orders are 1.998, 1.969, and 2.005. Mass changes remain at or below $2.78\times10^{-17}$.
+`examples/diffusion_1d/run_gaussian_validation.py` evolves a periodic image-sum Gaussian with $D=0.01$ to $t=0.05$. The initial state and analytical comparison are exact integrals over each finite-volume cell, not point samples at cell centres. Resolutions 50, 100, 200, and 400 give measured $L_1$ errors $4.4887\times10^{-4}$, $1.1375\times10^{-4}$, $2.9126\times10^{-5}$, and $7.2632\times10^{-6}$. The successive observed orders are 1.980, 1.965, and 2.004. Mass changes remain at or below $2.78\times10^{-17}$.
 
 The script writes `benchmarks/convergence/diffusion_1d_gaussian.csv` and `figures/diffusion_gaussian_convergence.png`. Automated tests also check the stability limit, exact final time, uniform-state preservation, zero diffusivity, and rejection of unstable timesteps.
 
 ## Dynamic AMR diffusion
 
-`examples/diffusion_1d/run_amr_diffusion.py` compares a dynamic AMR calculation on a 64-cell root against uniform 64- and 128-cell grids. The AMR calculation uses refinement ratio two, $r^2=4$ fine substeps per coarse step, conservative limited-linear patch initialization, linear coarse-fine ghost interpolation, restriction, and diffusive refluxing.
+`examples/diffusion_1d/run_amr_diffusion.py` compares a dynamic AMR calculation on a 64-cell root against uniform 64- and 128-cell grids. The AMR calculation uses refinement ratio two, $r^2=4$ fine substeps per coarse step, smooth conservative quadratic patch initialization, linear coarse-fine ghost interpolation, restriction, and diffusive refluxing.
 
-Uniform $N=64$ gives $L_1=2.8558\times10^{-4}$ with 384 cell updates. Dynamic AMR finishes with 98 active cells and gives $L_1=1.8816\times10^{-4}$ with 1920 cell updates. Uniform $N=128$ gives $L_1=6.9880\times10^{-5}$ with 2688 updates. The AMR mass change is $2.78\times10^{-17}$ and every recorded regrid preserves mass to roundoff.
+Uniform $N=64$ gives $L_1=2.8294\times10^{-4}$ with 384 cell updates. Dynamic AMR finishes with 98 active cells and gives $L_1=8.2265\times10^{-5}$ with 1920 cell updates. Uniform $N=128$ gives $L_1=6.9719\times10^{-5}$ with 2688 updates. The AMR mass change is $2.78\times10^{-17}$ and every recorded regrid preserves mass to roundoff.
 
-This validates improvement relative to the base grid and conservation across moving coarse-fine interfaces. It does not show fine-grid-equivalent accuracy: the uniform 128-cell result remains more accurate. The update-count reduction also does not establish a runtime advantage; a repeated diffusion timing study remains future work.
+This validates improvement relative to the base grid and conservation across moving coarse-fine interfaces. AMR is within 18% of the uniform fine-grid error while using 29% fewer updates, although the uniform 128-cell result remains more accurate.
+
+## Repeated diffusion performance study
+
+`benchmarks/performance/run_diffusion_benchmark.py` measures base resolutions 32, 64, and 128 against uniform grids at the base and twice-base resolutions. The recorded study uses one untimed warm-up and 15 complete timings per case. Timed work includes grid and hierarchy initialization, initial regridding, integration, and error diagnostics. Python, NumPy, platform, timer, and numerical parameters are stored in `benchmarks/performance/diffusion_accuracy_runtime_metadata.json`.
+
+Dynamic AMR errors are $4.1981\times10^{-4}$, $8.2265\times10^{-5}$, and $1.9494\times10^{-5}$, giving successive observed orders of approximately 2.35 and 2.08. Uniform fine errors are $2.8294\times10^{-4}$, $6.9719\times10^{-5}$, and $1.7723\times10^{-5}$. The AMR-to-fine error ratio improves from 1.48 to 1.18 and 1.10 as the base grid is refined.
+
+AMR uses 384, 1920, and 12192 cell updates, compared with 384, 2688, and 20992 for the uniform fine grids. The larger two cases reduce updates by approximately 29% and 42%. Median AMR runtimes are 0.002413 s, 0.004853 s, and 0.014023 s, while uniform fine medians are 0.000804 s, 0.001449 s, and 0.003683 s. AMR is therefore about 3.0–3.8 times slower in this environment despite the update-count reductions. Analytical cell-average evaluation is included in the timed initialization and diagnostics for every method.
+
+The associated sensitivity study evaluates all combinations of refinement thresholds 0.5, 1.0, and 2.0 and buffer widths 2, 4, and 8 on the 64-cell root. Most configurations reach an $L_1$ plateau near $8.22\times10^{-5}$. The least-refined case—threshold 2.0 with a two-cell buffer—covers 43.75% of the root and gives $1.1245\times10^{-4}$. Increasing that buffer to four and eight cells lowers the error to $8.4841\times10^{-5}$ and $8.2246\times10^{-5}$. This isolates insufficient feature coverage as a failure mode only when restrictive flagging is paired with a narrow buffer.
+
+`benchmarks/performance/diffusion_prolongation_comparison.csv` holds a controlled transfer comparison at base resolution 64. Piecewise-constant initialization gives $L_1=5.3031\times10^{-4}$, limited linear gives $8.8310\times10^{-5}$, and smooth conservative quadratic gives $8.2265\times10^{-5}$. All three preserve mass; quadratic transfer is selected for this smooth validation but is explicitly not monotonicity preserving.
+
+Across the scaling, sensitivity, and transfer cases, total mass and individual regrid mass changes remain at floating-point roundoff. Raw scaling measurements, sensitivity measurements, transfer measurements, minimum and maximum timing samples, and the generated figure are retained for reproducibility.

@@ -34,9 +34,9 @@ def fill_coarse_fine_ghost_cells(
     """Pad a level-one patch using fine neighbours before its coarse parent.
 
     Ghost-cell centres covered by any sibling patch use that sibling's fine
-    data. Remaining centres use piecewise-constant interpolation from the
-    parent. Periodic wrapping is relative to the root domain. Physical boundary
-    conditions other than periodic are deliberately not inferred here.
+    data. Remaining centres use piecewise-constant or linear interpolation
+    from the parent. Periodic wrapping is relative to the root domain. Physical
+    boundary conditions other than periodic are deliberately not inferred here.
     """
 
     if patch.parent is None:

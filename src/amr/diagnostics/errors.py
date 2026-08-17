@@ -71,3 +71,40 @@ def composite_error_norms(
         l2=float(np.sqrt(l2_integral / length)),
         linf=linf,
     )
+
+
+def composite_cell_average_error_norms(
+    hierarchy: AMRHierarchy1D,
+    exact_cell_averages: Callable[[np.ndarray], np.ndarray],
+) -> ErrorNorms:
+    """Calculate composite norms against exact finite-volume cell averages."""
+
+    l1_integral = 0.0
+    l2_integral = 0.0
+    linf = 0.0
+
+    def accumulate(patch: Patch1D) -> None:
+        nonlocal l1_integral, l2_integral, linf
+        exact = np.asarray(exact_cell_averages(patch.grid.cell_edges), dtype=float)
+        patch.grid.validate_field(exact)
+        covered = np.zeros(patch.n_valid_cells, dtype=bool)
+        for child in patch.children:
+            if child.parent_range is None:
+                raise RuntimeError("Hierarchy invariant violated: child has no parent range")
+            start, stop = child.parent_range
+            covered[start:stop] = True
+        if np.any(~covered):
+            difference = np.abs(patch.values[~covered] - exact[~covered])
+            l1_integral += float(np.sum(difference) * patch.grid.dx)
+            l2_integral += float(np.sum(difference**2) * patch.grid.dx)
+            linf = max(linf, float(np.max(difference)))
+        for child in patch.children:
+            accumulate(child)
+
+    accumulate(hierarchy.root)
+    length = hierarchy.root.grid.length
+    return ErrorNorms(
+        l1=l1_integral / length,
+        l2=float(np.sqrt(l2_integral / length)),
+        linf=linf,
+    )

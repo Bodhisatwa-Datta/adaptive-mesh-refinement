@@ -162,4 +162,6 @@ $$
 
 The final step is shortened to reach the requested time exactly. Periodic interface fluxes telescope, so the uniform solver conserves discrete mass to roundoff.
 
+Diffusion validation treats every $U_i$ as a finite-volume average. The analytical periodic Gaussian is integrated between the cell edges for both initialization and error calculation. This avoids mixing point samples with cell averages during conservative AMR prolongation.
+
 For a refinement ratio $r$, the fine diffusive stability limit is $r^2$ smaller than the coarse limit. The AMR solver therefore takes $r^2$ fine substeps per coarse step. Parent states are interpolated linearly in time at each fine substep and linearly in space at coarse-fine ghost centres. Time-integrated diffusive fluxes are accumulated in the same interface register used by the hyperbolic solvers, then refluxed after restriction.

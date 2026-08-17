@@ -51,7 +51,22 @@ $$
 U_{ir+j}^{f}=U_i^c+s_i\left(\frac{j+1/2}{r}-\frac12\right).
 $$
 
-The subcell offsets sum to zero, so the children retain the parent average exactly. The limiter prevents the reconstruction from creating new extrema. This option is used when initializing diffusion patches, where piecewise-constant transfer otherwise introduces a leading interpolation error in smooth data.
+The subcell offsets sum to zero, so the children retain the parent average exactly. The limiter prevents the reconstruction from creating new extrema.
+
+For smooth fields, an unlimited quadratic reconstruction is also available. With
+
+$$
+b_i=\frac{U_{i+1}^c-U_{i-1}^c}{2},\qquad
+a_i=\frac{U_{i+1}^c-2U_i^c+U_{i-1}^c}{2},
+$$
+
+and $\delta_j=(j+1/2)/r-1/2$, the fine average is
+
+$$
+U_{ir+j}^f=U_i^c+b_i\delta_j+a_i\left[\delta_j^2+\frac{1/r^2-1}{12}\right].
+$$
+
+Both bracketed terms average to zero over the $r$ children, so the transfer is conservative and exact for quadratic cell-average data. Unlike the limited-linear method, it can create new extrema and is therefore used only for the smooth Gaussian diffusion benchmark. In the measured 64-cell AMR case it reduces $L_1$ from $8.83\times10^{-5}$ to $8.23\times10^{-5}$.
 
 ## Restriction and derefinement
 
@@ -98,4 +113,4 @@ Restriction makes the root integral equal to the old composite integral. Prolong
 
 ## Not yet implemented
 
-More than one time-dependent fine level and higher-order flux reconstruction remain future work. Refluxing is implemented for the one-level advection, Burgers, and diffusion solvers. Conservative limited-linear prolongation and linear coarse-parent ghost interpolation are available, but multilevel recursive space-time interpolation is not.
+More than one time-dependent fine level and higher-order flux reconstruction remain future work. Refluxing is implemented for the one-level advection, Burgers, and diffusion solvers. Conservative limited-linear and smooth quadratic prolongation and linear coarse-parent ghost interpolation are available, but multilevel recursive space-time interpolation is not.

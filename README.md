@@ -17,7 +17,8 @@ A scientific Python project building a validated adaptive mesh refinement (AMR) 
 - Integer refinement ratios, with $r=2$ as the default
 - Absolute and normalized gradient indicators with configurable thresholds
 - Periodic or bounded flag buffering and deterministic region merging
-- Conservative piecewise-constant prolongation and average restriction
+- Conservative constant, limited-linear, and smooth quadratic prolongation
+- Conservative average restriction
 - Explicit stored-cell and active leaf-cell counts
 - Coarse-fine ghost filling with fine-neighbour precedence
 - Synchronized one-level AMR advection using a finest-grid global timestep
@@ -35,9 +36,11 @@ A scientific Python project building a validated adaptive mesh refinement (AMR) 
 - Shock-focused refinement and comparison with a high-resolution reference
 - Explicit finite-volume diffusion with the parabolic stability restriction
 - Analytical periodic Gaussian diffusion and measured second-order convergence
-- Conservative limited-linear prolongation with no new extrema
+- Exact analytical finite-volume Gaussian cell averages
+- Limited-linear monotone transfer and smooth quadratic transfer
 - Dynamic, refluxed AMR diffusion with linear coarse-fine interpolation
 - Parabolic subcycling with $r^2$ fine steps per coarse step
+- Repeated AMR diffusion accuracy/runtime and refinement-sensitivity benchmarks
 
 ## Implementation progress
 
@@ -54,6 +57,8 @@ The project has been implemented in a deliberate numerical sequence:
 9. Burgers' equation was coupled to dynamic, subcycled, refluxed AMR and tested through shock formation.
 10. A conservative explicit diffusion solver was implemented and validated against analytical periodic Gaussian spreading.
 11. Limited-linear conservative prolongation and linear coarse-fine ghost interpolation were added before coupling diffusion to dynamic, refluxed AMR with parabolic subcycling.
+12. A repeated diffusion benchmark then measured resolution scaling, update-count compression, runtime, and sensitivity to refinement thresholds and buffer widths.
+13. Diffusion validation was corrected to initialize and compare true analytical cell averages; smooth conservative quadratic prolongation then reduced the AMR transfer error close to the uniform fine-grid result.
 
 The hierarchy is generated directly from solution-based gradient flags and can be advanced with either static or dynamically replaced refined regions.
 
@@ -173,28 +178,46 @@ A periodic Gaussian is diffused with $D=0.01$ to $t=0.05$. The centred finite-vo
 
 | Cells | $L_1$ error | Observed order | Signed mass change |
 |---:|---:|---:|---:|
-| 50 | 4.5593e-4 | — | 0.00 |
-| 100 | 1.1416e-4 | 1.998 | 0.00 |
-| 200 | 2.9152e-5 | 1.969 | +2.78e-17 |
-| 400 | 7.2649e-6 | 2.005 | -2.78e-17 |
+| 50 | 4.4887e-4 | — | 0.00 |
+| 100 | 1.1375e-4 | 1.980 | -2.78e-17 |
+| 200 | 2.9126e-5 | 1.965 | +2.78e-17 |
+| 400 | 7.2632e-6 | 2.004 | -2.78e-17 |
 
 ![Gaussian diffusion convergence](figures/diffusion_gaussian_convergence.png)
 
-The measured rate is second order in space for this smooth problem. Mass remains conserved to floating-point roundoff.
+Initial data and errors use analytical averages integrated over each finite-volume cell, rather than point samples at cell centres. The measured rate is second order in space, and mass remains conserved to floating-point roundoff.
 
 ## Dynamic AMR diffusion
 
-The diffusion benchmark uses a 64-cell base grid, refinement ratio two, conservative limited-linear prolongation, linear parent ghost interpolation, and four fine steps per coarse step. The refined region expands as the Gaussian spreads.
+The diffusion benchmark uses a 64-cell base grid, refinement ratio two, smooth conservative quadratic prolongation, linear parent ghost interpolation, and four fine steps per coarse step. The refined region expands as the Gaussian spreads.
 
 | Calculation | Final active cells | Cell updates | $L_1$ error | Signed mass change |
 |---|---:|---:|---:|---:|
-| Uniform 64 | 64 | 384 | 2.8558e-4 | +1.04e-17 |
-| Dynamic AMR | 98 | 1920 | 1.8816e-4 | +2.78e-17 |
-| Uniform 128 | 128 | 2688 | 6.9880e-5 | -3.73e-18 |
+| Uniform 64 | 64 | 384 | 2.8294e-4 | +9.65e-18 |
+| Dynamic AMR | 98 | 1920 | 8.2265e-5 | +2.78e-17 |
+| Uniform 128 | 128 | 2688 | 6.9719e-5 | +9.85e-18 |
 
 ![Dynamic AMR diffusion comparison](figures/diffusion_amr_comparison.png)
 
-AMR improves the base-grid error and uses fewer updates than uniform $N=128$, while refluxing preserves mass to roundoff. It does not yet match the uniform fine-grid error, and update counts are not a wall-clock performance result.
+AMR reduces the base-grid error by about 71%, comes within 18% of the uniform 128-cell error, and uses 29% fewer updates. Refluxing preserves mass to roundoff. The update count is not a wall-clock performance result.
+
+## Diffusion accuracy and runtime assessment
+
+The repeated benchmark uses base grids 32, 64, and 128. Each calculation receives one untimed warm-up followed by 15 complete timings that include initialization, initial regridding, integration, and diagnostics.
+
+| Base cells | AMR $L_1$ | Fine uniform $L_1$ | AMR updates | Fine updates | AMR median [s] | Fine median [s] |
+|---:|---:|---:|---:|---:|---:|---:|
+| 32 | 4.1981e-4 | 2.8294e-4 | 384 | 384 | 2.413e-3 | 8.04e-4 |
+| 64 | 8.2265e-5 | 6.9719e-5 | 1920 | 2688 | 4.853e-3 | 1.449e-3 |
+| 128 | 1.9494e-5 | 1.7723e-5 | 12192 | 20992 | 1.4023e-2 | 3.683e-3 |
+
+![Diffusion accuracy, runtime, and sensitivity](figures/diffusion_accuracy_runtime.png)
+
+At the two larger base resolutions, AMR reduces fine-grid update counts by approximately 29% and 42%. Its measured $L_1$ convergence orders are approximately 2.35 and 2.08, and its error approaches the uniform fine result as resolution increases. However, it remains 3.0–3.8 times slower than the corresponding uniform fine calculation in this environment.
+
+A nine-case sweep combines refinement thresholds 0.5, 1.0, and 2.0 with buffers of 2, 4, and 8 coarse cells. Most configurations reach the same $8.22\times10^{-5}$ error plateau. The most aggressive threshold with only two buffer cells under-refines the Gaussian and gives $1.12\times10^{-4}$, showing that buffer coverage matters when flagging is restrictive.
+
+The transfer comparison gives $L_1=5.30\times10^{-4}$ for piecewise constant, $8.83\times10^{-5}$ for limited linear, and $8.23\times10^{-5}$ for smooth conservative quadratic initialization. Total and individual-regrid mass changes remain at floating-point roundoff.
 
 ## Installation
 
@@ -220,20 +243,21 @@ python examples/burgers_1d/run_shock_amr.py
 python examples/diffusion_1d/run_gaussian_validation.py
 python examples/diffusion_1d/run_amr_diffusion.py
 python benchmarks/performance/run_advection_benchmark.py --repeats 7
+python benchmarks/performance/run_diffusion_benchmark.py --repeats 15 --sensitivity-repeats 15
 ```
 
-The benchmark writes measured convergence data to `benchmarks/convergence/` and a validation plot to `figures/`. Results are generated by the implementation and are not hard-coded.
+The scripts write measured CSV data to `benchmarks/convergence/`, `benchmarks/uniform_vs_amr/`, and `benchmarks/performance/`, with validation plots in `figures/`. Results are generated by the implementation and are not hard-coded.
 
 ## Repository structure
 
 ```text
 src/amr/
-├── benchmarks/       # Initial conditions and analytical translations
+├── benchmarks/       # Initial conditions and analytical solutions
 ├── diagnostics/      # Errors, conservation, and mesh plotting
 ├── grid/             # Uniform grid, Patch1D, and AMRHierarchy1D
 ├── numerics/         # PDE-independent boundary handling
 ├── refinement/       # Criteria, prolongation, and restriction
-└── solvers/          # Uniform and synchronized AMR advection
+└── solvers/          # Uniform and one-level AMR PDE solvers
 examples/
 ├── advection_1d/
 ├── amr_1d/
@@ -242,6 +266,7 @@ examples/
 tests/
 benchmarks/
 ├── convergence/
+├── performance/
 └── uniform_vs_amr/
 figures/
 docs/
@@ -249,11 +274,11 @@ docs/
 
 ## Limitations
 
-Advection and Burgers use first-order spatial reconstruction and are numerically diffusive. Time-dependent AMR supports linear advection, inviscid Burgers' equation, and explicit diffusion on one refined level. Refinement ratio two is the validated time-dependent configuration. Conservative linear prolongation is implemented, but higher-order flux reconstruction and more than one time-dependent fine level are not. Explicit diffusion requires timesteps proportional to $\Delta x^2$, so a ratio-$r$ fine level takes $r^2$ substeps. Repeated advection timings show that the current Python AMR implementation is slower than uniform arrays for the tested problem sizes despite reducing update counts; diffusion runtime has not yet been benchmarked.
+Advection and Burgers use first-order spatial reconstruction and are numerically diffusive. Time-dependent AMR supports linear advection, inviscid Burgers' equation, and explicit diffusion on one refined level. Refinement ratio two is the validated time-dependent configuration. Smooth conservative quadratic prolongation is not monotonicity preserving and is used only for the smooth diffusion benchmark; limited-linear transfer remains available for nonsmooth fields. Higher-order flux reconstruction and more than one time-dependent fine level are not implemented. Explicit diffusion requires timesteps proportional to $\Delta x^2$, so a ratio-$r$ fine level takes $r^2$ substeps. Repeated advection and diffusion timings show that the current Python AMR implementation is slower than uniform arrays for the tested problem sizes despite reducing update counts.
 
-## Roadmap
+## Future extensions
 
-The next continuation should quantify AMR diffusion runtime and refinement sensitivity before extending the grid and hierarchy infrastructure to two dimensions.
+Future work can add second-order hyperbolic reconstruction, recursively subcycled multiple refinement levels, and two-dimensional grid and patch infrastructure. Performance work should profile and reduce Python-level hierarchy and regridding overhead before claiming wall-clock acceleration.
 
 ## License
 

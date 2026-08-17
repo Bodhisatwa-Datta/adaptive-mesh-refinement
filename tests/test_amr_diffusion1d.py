@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from amr.benchmarks.diffusion import periodic_gaussian_diffusion
-from amr.diagnostics.errors import composite_error_norms, error_norms
+from amr.benchmarks.diffusion import periodic_gaussian_diffusion_cell_averages
+from amr.diagnostics.errors import composite_cell_average_error_norms, error_norms
 from amr.grid.grid1d import UniformGrid1D
 from amr.grid.hierarchy import AMRHierarchy1D
 from amr.refinement.regrid import GradientRegridConfig, regrid_from_gradient
@@ -16,7 +16,7 @@ def diffusion_config() -> GradientRegridConfig:
         derefine_threshold=0.5,
         n_buffer=4,
         merge_gap=4,
-        prolongation="conservative_linear",
+        prolongation="conservative_quadratic",
     )
 
 
@@ -45,11 +45,15 @@ def test_dynamic_amr_diffusion_improves_on_base_grid() -> None:
     diffusivity = 0.01
     final_time = 0.05
     grid = UniformGrid1D(0.0, 1.0, 64)
-    initial = periodic_gaussian_diffusion(grid.cell_centres, 0.0, diffusivity)
-    exact = lambda x: periodic_gaussian_diffusion(x, final_time, diffusivity)
+    initial = periodic_gaussian_diffusion_cell_averages(
+        grid.cell_edges, 0.0, diffusivity
+    )
+    exact = lambda edges: periodic_gaussian_diffusion_cell_averages(
+        edges, final_time, diffusivity
+    )
 
     base = ExplicitDiffusion1D(grid, diffusivity).solve(initial, final_time)
-    base_error = error_norms(base.values, exact(grid.cell_centres)).l1
+    base_error = error_norms(base.values, exact(grid.cell_edges)).l1
 
     hierarchy = AMRHierarchy1D(grid, initial)
     config = diffusion_config()
@@ -62,7 +66,7 @@ def test_dynamic_amr_diffusion_improves_on_base_grid() -> None:
         subcycling=True,
         reflux=True,
     ).solve(final_time)
-    amr_error = composite_error_norms(hierarchy, exact).l1
+    amr_error = composite_cell_average_error_norms(hierarchy, exact).l1
 
     assert amr_error < base_error
     assert result.mass_error == pytest.approx(0.0, abs=3.0e-14)
@@ -76,4 +80,3 @@ def test_zero_diffusivity_does_not_advance_hierarchy() -> None:
     result = AMRExplicitDiffusion1D(hierarchy, diffusivity=0.0).solve(2.0)
     np.testing.assert_array_equal(hierarchy.root.values, original)
     assert result.n_steps == 0
-

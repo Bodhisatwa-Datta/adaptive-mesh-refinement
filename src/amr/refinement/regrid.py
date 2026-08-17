@@ -14,6 +14,7 @@ from amr.refinement.criteria import (
 )
 from amr.refinement.prolongation import (
     prolong_conservative_linear,
+    prolong_conservative_quadratic,
     prolong_piecewise_constant,
 )
 
@@ -48,9 +49,14 @@ class GradientRegridConfig:
             raise ValueError("merge_gap must be non-negative")
         if not np.isfinite(self.epsilon) or self.epsilon <= 0.0:
             raise ValueError("epsilon must be positive and finite")
-        if self.prolongation not in {"piecewise_constant", "conservative_linear"}:
+        if self.prolongation not in {
+            "piecewise_constant",
+            "conservative_linear",
+            "conservative_quadratic",
+        }:
             raise ValueError(
-                "prolongation must be 'piecewise_constant' or 'conservative_linear'"
+                "prolongation must be 'piecewise_constant', 'conservative_linear', "
+                "or 'conservative_quadratic'"
             )
 
 
@@ -128,6 +134,8 @@ def replace_level_one_patches(
         prolonged_root = prolong_piecewise_constant(hierarchy.root.values, ratio)
     elif prolongation == "conservative_linear":
         prolonged_root = prolong_conservative_linear(hierarchy.root.values, ratio)
+    elif prolongation == "conservative_quadratic":
+        prolonged_root = prolong_conservative_quadratic(hierarchy.root.values, ratio)
     else:
         raise ValueError("Unknown prolongation method")
     new_children = []
