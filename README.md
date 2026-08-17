@@ -22,6 +22,22 @@ A scientific Python project building a validated adaptive mesh refinement (AMR) 
 - Coarse-fine ghost filling with fine-neighbour precedence
 - Synchronized one-level AMR advection using a finest-grid global timestep
 - Composite-grid error and conservation diagnostics
+- Conservative dynamic patch replacement with overlapping fine-data retention
+- Configurable regrid intervals and refine/derefine hysteresis
+- Regrid event, peak-cell, and cumulative-update diagnostics
+- Temporal subcycling with $r$ fine steps per coarse step
+- Linear-in-time coarse boundary interpolation during fine substeps
+- Flux-register refluxing at coarse-fine interfaces
+- Composite conservation to floating-point roundoff with refluxing
+- Conservative uniform-grid inviscid Burgers solver with local Rusanov flux
+- Pre-shock characteristic solution and measured Burgers convergence study
+- Dynamic, subcycled, refluxed Burgers AMR with state-dependent CFL control
+- Shock-focused refinement and comparison with a high-resolution reference
+- Explicit finite-volume diffusion with the parabolic stability restriction
+- Analytical periodic Gaussian diffusion and measured second-order convergence
+- Conservative limited-linear prolongation with no new extrema
+- Dynamic, refluxed AMR diffusion with linear coarse-fine interpolation
+- Parabolic subcycling with $r^2$ fine steps per coarse step
 
 ## Implementation progress
 
@@ -30,9 +46,16 @@ The project has been implemented in a deliberate numerical sequence:
 1. A conservative uniform-grid advection solver was implemented and validated against exact periodic translations and a measured convergence study.
 2. Tree-structured AMR patches, gradient flagging, conservative level transfers, derefinement, and hierarchy visualization were then added and independently tested.
 3. Coarse-fine ghost filling and a synchronized one-level advection update were then coupled to the hierarchy and checked against the exact translated solution.
-4. The next implementation step is dynamic regridding so the refined region can follow the transported feature.
+4. Conservative dynamic regridding with threshold hysteresis was added so refinement follows transported features without changing mass during patch replacement.
+5. Temporal subcycling was added so level one takes $r$ steps for each coarse step, using time-interpolated parent data at patch boundaries.
+6. Time-integrated flux registers and reflux correction were then added, restoring composite conservation across coarse-fine interfaces.
+7. A repeated accuracy/runtime study quantified the gap between update-count compression and Python wall-clock performance.
+8. A conservative uniform Burgers solver was implemented and validated in the smooth pre-shock regime.
+9. Burgers' equation was coupled to dynamic, subcycled, refluxed AMR and tested through shock formation.
+10. A conservative explicit diffusion solver was implemented and validated against analytical periodic Gaussian spreading.
+11. Limited-linear conservative prolongation and linear coarse-fine ghost interpolation were added before coupling diffusion to dynamic, refluxed AMR with parabolic subcycling.
 
-The hierarchy is generated directly from solution-based gradient flags and can now be advanced with a static refined region.
+The hierarchy is generated directly from solution-based gradient flags and can be advanced with either static or dynamically replaced refined regions.
 
 ![Static gradient-selected AMR hierarchy](figures/gradient_selected_amr_hierarchy.png)
 
@@ -40,6 +63,19 @@ The solved equation is
 
 $$
 \frac{\partial u}{\partial t}+a\frac{\partial u}{\partial x}=0.
+$$
+
+The uniform-grid solver also supports inviscid Burgers' equation,
+
+$$
+\frac{\partial u}{\partial t}+\frac{\partial}{\partial x}\left(\frac{u^2}{2}\right)=0.
+$$
+
+Diffusion is advanced in conservative flux form,
+
+$$
+\frac{\partial u}{\partial t}=D\frac{\partial^2u}{\partial x^2},
+\qquad F=-D\frac{\partial u}{\partial x}.
 $$
 
 The conservative update and upwind flux are documented in [docs/numerical_methods.md](docs/numerical_methods.md). Validation methodology is described in [docs/validation.md](docs/validation.md).
@@ -71,6 +107,95 @@ A separate benchmark transports the Gaussian to $t=0.1$ using a 64-cell base gri
 
 The static AMR calculation improves on the coarse-grid error and approaches the fine-grid result with fewer active cells. It performs more cell updates than uniform $N=128$ because the synchronized baseline advances covered coarse cells and uses the fine-grid timestep everywhere. This is not an efficiency result, and the measured mass drift shows why coarse-fine flux correction is still required.
 
+## Dynamic refinement validation
+
+The moving-patch benchmark transports a Gaussian from $x=0.25$ to $x=0.55$, rebuilding level one every four fine-grid timesteps. Separate refinement and derefinement thresholds provide hysteresis.
+
+| Calculation | Final active cells | Cell updates | $L_1$ error | Signed mass change |
+|---|---:|---:|---:|---:|
+| Uniform 64 | 64 | 1536 | 1.4861e-2 | -2.78e-17 |
+| Static AMR | 96 | 6144 | 1.7063e-2 | +2.8306e-3 |
+| Dynamic AMR | 99 | 6424 | 8.0916e-3 | +9.0057e-5 |
+| Subcycled AMR | 99 | 4888 | 8.0001e-3 | -1.4829e-6 |
+| Refluxed AMR | 99 | 4888 | 8.0015e-3 | -2.78e-17 |
+| Uniform 128 | 128 | 6144 | 7.7606e-3 | 0.00 |
+
+![Dynamic AMR follows the transported Gaussian](figures/dynamic_amr_advection.png)
+
+The dynamic patch prevents the feature from leaving the fine region and nearly matches the uniform fine-grid error. Subcycling reduces the update count below uniform $N=128$. Refluxing then reduces the total mass change to floating-point roundoff without materially changing the error. The largest mass change caused by an individual regrid is $8.33\times10^{-17}$.
+
+This demonstrates an update-count advantage for this case, not yet a runtime advantage. Repeated timing measurements and broader resolution studies are still required before making a performance claim.
+
+## Accuracy and runtime assessment
+
+The repeated benchmark uses base grids 32, 64, and 128, compares dynamic refluxed AMR against uniform grids with twice the base resolution, performs one untimed warm-up, and records the median of seven complete runs.
+
+| Base cells | AMR $L_1$ | Fine uniform $L_1$ | AMR updates | Fine updates | AMR median [s] | Fine median [s] |
+|---:|---:|---:|---:|---:|---:|---:|
+| 32 | 1.5748e-2 | 1.4861e-2 | 1512 | 1536 | 6.540e-3 | 6.71e-4 |
+| 64 | 8.0015e-3 | 7.7606e-3 | 4888 | 6144 | 1.008e-2 | 1.292e-3 |
+| 128 | 4.0309e-3 | 3.9669e-3 | 17152 | 24576 | 2.104e-2 | 2.717e-3 |
+
+![Advection accuracy and runtime assessment](figures/advection_accuracy_runtime.png)
+
+AMR reduces cell updates at the two larger resolutions, but is approximately 8–10 times slower in these measurements. Python-level patch management and frequent regridding dominate the inexpensive first-order stencil. These timings are environment-specific and can be regenerated from the recorded benchmark script and metadata.
+
+## Smooth Burgers validation
+
+The uniform Burgers solver is compared at $t=0.2$ with the characteristic solution for $u_0(x)=0.5+0.2\sin(2\pi x)$. The analytical solution remains smooth until $t_s\approx0.7958$.
+
+| Cells | $L_1$ error | Observed order | Signed mass change |
+|---:|---:|---:|---:|
+| 50 | 2.3678e-3 | — | -5.55e-17 |
+| 100 | 1.1509e-3 | 1.041 | +1.11e-16 |
+| 200 | 5.5984e-4 | 1.040 | 0.00 |
+| 400 | 2.7838e-4 | 1.008 | 0.00 |
+
+![Smooth Burgers convergence](figures/burgers_smooth_convergence.png)
+
+## Burgers shock tracking
+
+At $t=1.0>t_s$, the smooth initial condition has formed a periodic shock. Dynamic AMR concentrates level one at that shock and is compared with a uniform $N=2048$ numerical reference.
+
+| Calculation | Final active cells | Cell updates | $L_1$ vs reference | Signed mass change |
+|---|---:|---:|---:|---:|
+| Uniform 64 | 64 | 3584 | 1.0511e-2 | -2.08e-17 |
+| Dynamic refluxed AMR | 72 | 10704 | 5.9122e-3 | 0.00 |
+| Uniform 128 | 128 | 14336 | 5.3813e-3 | +2.13e-17 |
+
+![Dynamic AMR tracking a Burgers shock](figures/burgers_shock_amr.png)
+
+The AMR result approaches the uniform 128-cell error with fewer final active cells and fewer updates. The comparison uses a numerical reference rather than an analytical post-shock solution, and no runtime advantage is inferred from update counts alone.
+
+## Diffusion validation
+
+A periodic Gaussian is diffused with $D=0.01$ to $t=0.05$. The centred finite-volume flux and forward-Euler update use $\Delta t\leq C\Delta x^2/(2D)$ with $C=0.8$.
+
+| Cells | $L_1$ error | Observed order | Signed mass change |
+|---:|---:|---:|---:|
+| 50 | 4.5593e-4 | — | 0.00 |
+| 100 | 1.1416e-4 | 1.998 | 0.00 |
+| 200 | 2.9152e-5 | 1.969 | +2.78e-17 |
+| 400 | 7.2649e-6 | 2.005 | -2.78e-17 |
+
+![Gaussian diffusion convergence](figures/diffusion_gaussian_convergence.png)
+
+The measured rate is second order in space for this smooth problem. Mass remains conserved to floating-point roundoff.
+
+## Dynamic AMR diffusion
+
+The diffusion benchmark uses a 64-cell base grid, refinement ratio two, conservative limited-linear prolongation, linear parent ghost interpolation, and four fine steps per coarse step. The refined region expands as the Gaussian spreads.
+
+| Calculation | Final active cells | Cell updates | $L_1$ error | Signed mass change |
+|---|---:|---:|---:|---:|
+| Uniform 64 | 64 | 384 | 2.8558e-4 | +1.04e-17 |
+| Dynamic AMR | 98 | 1920 | 1.8816e-4 | +2.78e-17 |
+| Uniform 128 | 128 | 2688 | 6.9880e-5 | -3.73e-18 |
+
+![Dynamic AMR diffusion comparison](figures/diffusion_amr_comparison.png)
+
+AMR improves the base-grid error and uses fewer updates than uniform $N=128$, while refluxing preserves mass to roundoff. It does not yet match the uniform fine-grid error, and update counts are not a wall-clock performance result.
+
 ## Installation
 
 Python 3.10 or newer is required. From the repository root:
@@ -89,6 +214,12 @@ python -m pytest
 python examples/advection_1d/run_gaussian.py
 python examples/amr_1d/build_static_hierarchy.py
 python examples/amr_1d/run_static_advection.py
+python examples/amr_1d/run_dynamic_advection.py
+python examples/burgers_1d/run_smooth_validation.py
+python examples/burgers_1d/run_shock_amr.py
+python examples/diffusion_1d/run_gaussian_validation.py
+python examples/diffusion_1d/run_amr_diffusion.py
+python benchmarks/performance/run_advection_benchmark.py --repeats 7
 ```
 
 The benchmark writes measured convergence data to `benchmarks/convergence/` and a validation plot to `figures/`. Results are generated by the implementation and are not hard-coded.
@@ -105,7 +236,9 @@ src/amr/
 └── solvers/          # Uniform and synchronized AMR advection
 examples/
 ├── advection_1d/
-└── amr_1d/
+├── amr_1d/
+├── burgers_1d/
+└── diffusion_1d/
 tests/
 benchmarks/
 ├── convergence/
@@ -116,11 +249,11 @@ docs/
 
 ## Limitations
 
-The advection scheme is first order and numerically diffusive. The AMR hierarchy remains static during integration and currently supports one refined level. There is no dynamic regridding, temporal subcycling, or refluxing. The lack of refluxing produces a measurable composite mass error at coarse-fine interfaces, and runtime comparisons remain premature.
+Advection and Burgers use first-order spatial reconstruction and are numerically diffusive. Time-dependent AMR supports linear advection, inviscid Burgers' equation, and explicit diffusion on one refined level. Refinement ratio two is the validated time-dependent configuration. Conservative linear prolongation is implemented, but higher-order flux reconstruction and more than one time-dependent fine level are not. Explicit diffusion requires timesteps proportional to $\Delta x^2$, so a ratio-$r$ fine level takes $r^2$ substeps. Repeated advection timings show that the current Python AMR implementation is slower than uniform arrays for the tested problem sizes despite reducing update counts; diffusion runtime has not yet been benchmarked.
 
 ## Roadmap
 
-The next milestone is controlled dynamic regridding with buffered refinement regions and conservative transfer when patches are replaced. Temporal subcycling and refluxing will follow after the moving hierarchy is validated.
+The next continuation should quantify AMR diffusion runtime and refinement sensitivity before extending the grid and hierarchy infrastructure to two dimensions.
 
 ## License
 

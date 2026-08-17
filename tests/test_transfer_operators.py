@@ -1,7 +1,10 @@
 import numpy as np
 import pytest
 
-from amr.refinement.prolongation import prolong_piecewise_constant
+from amr.refinement.prolongation import (
+    prolong_conservative_linear,
+    prolong_piecewise_constant,
+)
 from amr.refinement.restriction import restrict_cell_averages
 
 
@@ -37,3 +40,16 @@ def test_restriction_rejects_incomplete_fine_groups() -> None:
     with pytest.raises(ValueError, match="divisible"):
         restrict_cell_averages([1.0, 2.0, 3.0], refinement_ratio=2)
 
+
+@pytest.mark.parametrize("ratio", [2, 3, 4])
+def test_linear_prolongation_preserves_parent_averages(ratio: int) -> None:
+    coarse = np.array([1.0, 1.5, 2.5, 2.0, 0.5])
+    fine = prolong_conservative_linear(coarse, ratio)
+    np.testing.assert_allclose(fine.reshape(-1, ratio).mean(axis=1), coarse, atol=2.0e-15)
+
+
+def test_limited_linear_prolongation_creates_no_new_extrema() -> None:
+    coarse = np.array([0.0, 0.0, 1.0, 1.0, 0.0])
+    fine = prolong_conservative_linear(coarse, 2)
+    assert np.min(fine) >= 0.0
+    assert np.max(fine) <= 1.0

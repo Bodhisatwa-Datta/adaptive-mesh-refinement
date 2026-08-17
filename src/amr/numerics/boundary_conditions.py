@@ -28,6 +28,8 @@ def fill_coarse_fine_ghost_cells(
     n_ghost: int = 1,
     *,
     periodic: bool = True,
+    parent_values: ArrayLike | None = None,
+    parent_interpolation: str = "piecewise_constant",
 ) -> NDArray[np.float64]:
     """Pad a level-one patch using fine neighbours before its coarse parent.
 
@@ -51,6 +53,12 @@ def fill_coarse_fine_ghost_cells(
         raise ValueError("n_ghost cannot exceed the number of valid patch cells")
 
     parent = patch.parent
+    coarse_values = (
+        parent.values if parent_values is None else np.asarray(parent_values, dtype=float)
+    )
+    parent.grid.validate_field(coarse_values)
+    if parent_interpolation not in {"piecewise_constant", "linear"}:
+        raise ValueError("parent_interpolation must be 'piecewise_constant' or 'linear'")
     left_centres = patch.grid.x_min - (
         np.arange(n_ghost, 0, -1, dtype=float) - 0.5
     ) * patch.grid.dx
@@ -72,9 +80,19 @@ def fill_coarse_fine_ghost_cells(
                 index = min(max(index, 0), sibling.grid.n_cells - 1)
                 return float(sibling.values[index])
 
-        index = int(np.floor((x - parent.grid.x_min) / parent.grid.dx))
-        index = min(max(index, 0), parent.grid.n_cells - 1)
-        return float(parent.values[index])
+        if parent_interpolation == "piecewise_constant":
+            index = int(np.floor((x - parent.grid.x_min) / parent.grid.dx))
+            index = min(max(index, 0), parent.grid.n_cells - 1)
+            return float(coarse_values[index])
+
+        fractional_index = (
+            x - (parent.grid.x_min + 0.5 * parent.grid.dx)
+        ) / parent.grid.dx
+        lower_unwrapped = int(np.floor(fractional_index))
+        fraction = fractional_index - lower_unwrapped
+        lower = lower_unwrapped % parent.grid.n_cells
+        upper = (lower + 1) % parent.grid.n_cells
+        return float((1.0 - fraction) * coarse_values[lower] + fraction * coarse_values[upper])
 
     left = np.fromiter((sample(x) for x in left_centres), dtype=float, count=n_ghost)
     right = np.fromiter((sample(x) for x in right_centres), dtype=float, count=n_ghost)

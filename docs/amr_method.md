@@ -31,7 +31,7 @@ Cells are flagged only when $R_i$ is strictly greater than a configurable thresh
 
 ## Conservative prolongation
 
-The initial prolongation method is piecewise constant. Every one of the $r$ fine children receives the parent average:
+The robust baseline is piecewise constant. Every one of the $r$ fine children receives the parent average:
 
 $$
 U_{ir+j}^{f}=U_i^c,\qquad j=0,\ldots,r-1.
@@ -43,7 +43,15 @@ $$
 \frac{1}{r}\sum_{j=0}^{r-1}U_{ir+j}^{f}=U_i^c.
 $$
 
-This method is conservative and robust but only first-order accurate. Higher-order conservative interpolation is deferred.
+This method is conservative and robust but only first-order accurate.
+
+The hierarchy also supports conservative piecewise-linear reconstruction. A monotonized-central limiter computes a dimensionless parent-cell slope $s_i$. Fine child $j$ receives
+
+$$
+U_{ir+j}^{f}=U_i^c+s_i\left(\frac{j+1/2}{r}-\frac12\right).
+$$
+
+The subcell offsets sum to zero, so the children retain the parent average exactly. The limiter prevents the reconstruction from creating new extrema. This option is used when initializing diffusion patches, where piecewise-constant transfer otherwise introduces a leading interpolation error in smooth data.
 
 ## Restriction and derefinement
 
@@ -57,7 +65,7 @@ Because $\Delta x_f=\Delta x_c/r$, the integrated quantity is unchanged. Removin
 
 ## Coarse-fine ghost cells
 
-The synchronized advection solver currently requires one ghost cell on each side of a fine patch. A ghost-cell centre covered by an attached fine patch receives that fine value, including across the periodic domain boundary. Otherwise, the value is interpolated piecewise-constantly from the root grid cell containing the ghost centre.
+The time-dependent solvers require one ghost cell on each side of a fine patch. A ghost-cell centre covered by an attached fine patch receives that fine value, including across the periodic domain boundary. Otherwise, the value is interpolated from the root grid. Advection and Burgers retain piecewise-constant interpolation; diffusion uses periodic linear interpolation evaluated at the actual fine ghost-cell centre.
 
 The current implementation deliberately supports this operation only between the root and level one. Deeper time-dependent levels require recursive spatial and temporal interpolation and are rejected explicitly.
 
@@ -71,6 +79,23 @@ $$
 
 Covered coarse cells remain stored for synchronization but are excluded from physical integrals and error norms.
 
+## Dynamic regridding
+
+At a configured interval, the synchronized root solution is evaluated with the gradient indicator. Cells above the refinement threshold are flagged. Cells already covered by level one remain eligible down to a separate, lower derefinement threshold:
+
+$$
+R_{\mathrm{derefine}} \leq R_{\mathrm{refine}}.
+$$
+
+The union of newly flagged and retained cells is buffered and converted into merged parent-cell ranges. If these ranges differ from the current layout, level one is replaced conservatively:
+
+1. Restrict every old fine patch onto the root.
+2. Initialize each requested patch by conservative prolongation.
+3. Copy old fine values directly wherever old and new patches overlap.
+4. Attach the replacement patches and record the regrid mass change.
+
+Restriction makes the root integral equal to the old composite integral. Prolongation preserves each root average, while copied overlap data already has the same restricted average. The replacement therefore preserves composite mass to roundoff.
+
 ## Not yet implemented
 
-The hierarchy is static during a solve. Dynamic regridding with hysteresis, temporal subcycling, multilevel time interpolation, and refluxing remain future work. The synchronized solver restricts fine solutions but does not correct mismatched coarse and fine interface fluxes.
+More than one time-dependent fine level and higher-order flux reconstruction remain future work. Refluxing is implemented for the one-level advection, Burgers, and diffusion solvers. Conservative limited-linear prolongation and linear coarse-parent ghost interpolation are available, but multilevel recursive space-time interpolation is not.

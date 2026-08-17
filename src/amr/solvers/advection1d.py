@@ -49,10 +49,19 @@ class LinearAdvection1D:
 
         return self.spatial_operator_with_ghost_cells(field, ghosted)
 
-    def spatial_operator_with_ghost_cells(
+    def interface_fluxes(self, values: ArrayLike) -> NDArray[np.float64]:
+        """Return all periodic numerical fluxes, including both domain edges."""
+
+        field = np.asarray(values, dtype=float)
+        self.grid.validate_field(field)
+        return self.interface_fluxes_with_ghost_cells(
+            field, fill_periodic_ghost_cells(field)
+        )
+
+    def interface_fluxes_with_ghost_cells(
         self, values: ArrayLike, ghosted_values: ArrayLike
     ) -> NDArray[np.float64]:
-        """Return the operator using one caller-provided ghost cell per side."""
+        """Return numerical interface fluxes using caller-provided ghosts."""
 
         field = np.asarray(values, dtype=float)
         self.grid.validate_field(field)
@@ -63,11 +72,16 @@ class LinearAdvection1D:
             raise ValueError("ghosted_values must be finite")
         if not np.array_equal(ghosted[1:-1], field):
             raise ValueError("The valid portion of ghosted_values must equal values")
-
         if self.velocity >= 0.0:
-            fluxes = self.velocity * ghosted[:-1]
-        else:
-            fluxes = self.velocity * ghosted[1:]
+            return self.velocity * ghosted[:-1]
+        return self.velocity * ghosted[1:]
+
+    def spatial_operator_with_ghost_cells(
+        self, values: ArrayLike, ghosted_values: ArrayLike
+    ) -> NDArray[np.float64]:
+        """Return the operator using one caller-provided ghost cell per side."""
+
+        fluxes = self.interface_fluxes_with_ghost_cells(values, ghosted_values)
         return -(fluxes[1:] - fluxes[:-1]) / self.grid.dx
 
     def step(self, values: ArrayLike, dt: float) -> NDArray[np.float64]:

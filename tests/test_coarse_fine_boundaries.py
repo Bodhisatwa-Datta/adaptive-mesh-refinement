@@ -40,3 +40,22 @@ def test_nonperiodic_physical_boundary_requires_explicit_data() -> None:
     with pytest.raises(ValueError, match="physical boundary"):
         fill_coarse_fine_ghost_cells(child, periodic=False)
 
+
+def test_temporally_interpolated_parent_values_can_fill_ghosts() -> None:
+    hierarchy = make_hierarchy()
+    child = hierarchy.add_patch(hierarchy.root, 2, 4)
+    interpolated_parent = hierarchy.root.values + 100.0
+    ghosted = fill_coarse_fine_ghost_cells(child, parent_values=interpolated_parent)
+    assert ghosted[0] == 101.0
+    assert ghosted[-1] == 104.0
+
+
+def test_linear_parent_interpolation_uses_fine_ghost_coordinates() -> None:
+    hierarchy = make_hierarchy()
+    child = hierarchy.add_patch(hierarchy.root, 2, 4)
+    ghosted = fill_coarse_fine_ghost_cells(
+        child,
+        parent_interpolation="linear",
+    )
+    assert ghosted[0] == pytest.approx(1.25)
+    assert ghosted[-1] == pytest.approx(3.75)
