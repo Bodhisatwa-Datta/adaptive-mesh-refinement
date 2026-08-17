@@ -47,6 +47,23 @@ class LinearAdvection1D:
         self.grid.validate_field(field)
         ghosted = fill_periodic_ghost_cells(field)
 
+        return self.spatial_operator_with_ghost_cells(field, ghosted)
+
+    def spatial_operator_with_ghost_cells(
+        self, values: ArrayLike, ghosted_values: ArrayLike
+    ) -> NDArray[np.float64]:
+        """Return the operator using one caller-provided ghost cell per side."""
+
+        field = np.asarray(values, dtype=float)
+        self.grid.validate_field(field)
+        ghosted = np.asarray(ghosted_values, dtype=float)
+        if ghosted.shape != (self.grid.n_cells + 2,):
+            raise ValueError("ghosted_values must contain one ghost cell on each side")
+        if not np.all(np.isfinite(ghosted)):
+            raise ValueError("ghosted_values must be finite")
+        if not np.array_equal(ghosted[1:-1], field):
+            raise ValueError("The valid portion of ghosted_values must equal values")
+
         if self.velocity >= 0.0:
             fluxes = self.velocity * ghosted[:-1]
         else:
@@ -64,6 +81,22 @@ class LinearAdvection1D:
         field = np.asarray(values, dtype=float)
         return field + dt * self.spatial_operator(field)
 
+    def step_with_ghost_cells(
+        self,
+        values: ArrayLike,
+        ghosted_values: ArrayLike,
+        dt: float,
+    ) -> NDArray[np.float64]:
+        """Advance one step using externally filled boundary ghost cells."""
+
+        if not np.isfinite(dt) or dt <= 0.0:
+            raise ValueError("dt must be positive and finite")
+        tolerance = 16.0 * np.finfo(float).eps * max(1.0, self.stable_timestep)
+        if dt > self.stable_timestep + tolerance:
+            raise ValueError("dt exceeds the configured CFL stability limit")
+        field = np.asarray(values, dtype=float)
+        return field + dt * self.spatial_operator_with_ghost_cells(field, ghosted_values)
+
     def solve(self, initial_values: ArrayLike, final_time: float) -> AdvectionResult:
         """Integrate from time zero to ``final_time`` with an exact final step."""
 
@@ -76,10 +109,10 @@ class LinearAdvection1D:
 
         time = 0.0
         n_steps = 0
-        while time < final_time:
+        time_tolerance = 16.0 * np.spacing(final_time)
+        while final_time - time > time_tolerance:
             dt = min(self.stable_timestep, final_time - time)
             values = self.step(values, dt)
             time += dt
             n_steps += 1
         return AdvectionResult(values=values, time=float(final_time), n_steps=n_steps)
-

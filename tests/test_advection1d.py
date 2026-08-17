@@ -66,3 +66,10 @@ def test_timestep_above_cfl_limit_is_rejected() -> None:
     solver = LinearAdvection1D(grid, velocity=1.0, cfl=0.8)
     with pytest.raises(ValueError, match="CFL"):
         solver.step(np.ones(grid.n_cells), 1.01 * solver.stable_timestep)
+
+
+def test_exact_multiple_of_cfl_step_does_not_add_roundoff_step() -> None:
+    grid = UniformGrid1D(0.0, 1.0, 64)
+    solver = LinearAdvection1D(grid, velocity=1.0, cfl=0.8)
+    result = solver.solve(np.ones(grid.n_cells), final_time=0.1)
+    assert result.n_steps == 8

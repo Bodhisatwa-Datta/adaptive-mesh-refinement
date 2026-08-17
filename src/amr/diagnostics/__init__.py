@@ -1,6 +1,12 @@
 """Accuracy and conservation diagnostics."""
 
-from amr.diagnostics.conservation import total_mass
-from amr.diagnostics.errors import ErrorNorms, error_norms
+from amr.diagnostics.conservation import composite_mass, total_mass
+from amr.diagnostics.errors import ErrorNorms, composite_error_norms, error_norms
 
-__all__ = ["ErrorNorms", "error_norms", "total_mass"]
+__all__ = [
+    "ErrorNorms",
+    "composite_error_norms",
+    "composite_mass",
+    "error_norms",
+    "total_mass",
+]

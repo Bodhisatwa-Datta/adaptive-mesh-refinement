@@ -55,6 +55,22 @@ $$
 
 Because $\Delta x_f=\Delta x_c/r$, the integrated quantity is unchanged. Removing a fine leaf patch restricts its current values onto the covered parent cells by default before detaching it from the hierarchy.
 
+## Coarse-fine ghost cells
+
+The synchronized advection solver currently requires one ghost cell on each side of a fine patch. A ghost-cell centre covered by an attached fine patch receives that fine value, including across the periodic domain boundary. Otherwise, the value is interpolated piecewise-constantly from the root grid cell containing the ghost centre.
+
+The current implementation deliberately supports this operation only between the root and level one. Deeper time-dependent levels require recursive spatial and temporal interpolation and are rejected explicitly.
+
+## Composite solution
+
+Diagnostics count only leaf cells. If $\mathcal{L}$ is the set of cells not covered by a finer patch, composite mass is
+
+$$
+M_{\mathrm{AMR}}=\sum_{i\in\mathcal{L}}U_i\Delta x_i.
+$$
+
+Covered coarse cells remain stored for synchronization but are excluded from physical integrals and error norms.
+
 ## Not yet implemented
 
-The hierarchy is static and is not coupled to a PDE solver. Coarse-fine ghost filling, synchronized level updates, temporal subcycling, dynamic regridding with hysteresis, and refluxing remain future milestones.
+The hierarchy is static during a solve. Dynamic regridding with hysteresis, temporal subcycling, multilevel time interpolation, and refluxing remain future work. The synchronized solver restricts fine solutions but does not correct mismatched coarse and fine interface fluxes.

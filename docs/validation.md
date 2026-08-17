@@ -34,3 +34,11 @@ $$
 $$
 
 Hierarchy tests separately verify coordinate alignment, valid index ranges, parent/child links, rejection of overlapping siblings, active-cell counting, multilevel trees, and restriction before derefinement. Gradient tests cover uniform-state preservation, periodic discontinuities, normalized scale invariance, buffer wrapping, bounded buffers, and region merging.
+
+## Static AMR advection check
+
+The static-patch benchmark uses a 64-cell root, refinement ratio two, $a=1$, $C_{\mathrm{CFL}}=0.8$, and final time $t=0.1$. The fine region is selected from the initial Gaussian by the configured gradient threshold and eight buffer cells. `examples/amr_1d/run_static_advection.py` writes all measurements to `benchmarks/uniform_vs_amr/static_advection_1d.csv`.
+
+Measured $L_1$ errors are $5.2767\times10^{-3}$ for uniform $N=64$, $3.1261\times10^{-3}$ for 100 active AMR cells, and $2.6692\times10^{-3}$ for uniform $N=128$. The corresponding actual cell-update counts are 512, 2176, and 2048. The AMR count uses all 136 stored cells because covered root cells are advanced before restriction. This exposes the cost of global fine timesteps and redundant covered-cell updates in the initial synchronized algorithm.
+
+The uniform calculations conserve mass to roundoff, while the static AMR calculation has signed mass change $+1.8991\times10^{-4}$. This is an expected limitation of synchronization by restriction without refluxing. The result is recorded as evidence for the need for flux correction; it is not presented as a conservative AMR result or as a runtime-efficiency result.
