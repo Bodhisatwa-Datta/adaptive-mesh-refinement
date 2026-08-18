@@ -113,4 +113,4 @@ Restriction makes the root integral equal to the old composite integral. Prolong
 
 ## Not yet implemented
 
-More than one time-dependent fine level and higher-order flux reconstruction remain future work. Refluxing is implemented for the one-level advection, Burgers, and diffusion solvers. Conservative limited-linear and smooth quadratic prolongation and linear coarse-parent ghost interpolation are available, but multilevel recursive space-time interpolation is not.
+More than one time-dependent fine level and higher-order flux reconstruction within AMR remain future work. Refluxing is implemented for the one-level advection, Burgers, and diffusion solvers. Conservative limited-linear and smooth quadratic prolongation and linear coarse-parent ghost interpolation are available, but multilevel recursive space-time interpolation is not.

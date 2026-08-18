@@ -90,3 +90,45 @@ def periodic_gaussian_diffusion_cell_averages(
         )
         integral += initial_width * np.sqrt(np.pi / 2.0) * np.diff(edge_erf)
     return integral / np.diff(edges)
+
+
+def periodic_sine_diffusion_cell_averages(
+    cell_edges: ArrayLike,
+    time: float,
+    diffusivity: float,
+    *,
+    mean: float = 0.5,
+    amplitude: float = 0.2,
+    mode: int = 1,
+    phase: float = 0.0,
+    x_min: float = 0.0,
+    x_max: float = 1.0,
+) -> NDArray[np.float64]:
+    """Return exact cell averages for a decaying periodic Fourier mode."""
+
+    edges = np.asarray(cell_edges, dtype=float)
+    if edges.ndim != 1 or edges.size < 2:
+        raise ValueError("cell_edges must be a one-dimensional array with at least two edges")
+    if not np.all(np.isfinite(edges)) or np.any(np.diff(edges) <= 0.0):
+        raise ValueError("cell_edges must be finite and strictly increasing")
+    if not np.isfinite(time) or time < 0.0:
+        raise ValueError("time must be finite and non-negative")
+    if not np.isfinite(diffusivity) or diffusivity < 0.0:
+        raise ValueError("diffusivity must be non-negative and finite")
+    if not np.isfinite(mean) or not np.isfinite(amplitude) or not np.isfinite(phase):
+        raise ValueError("mean, amplitude, and phase must be finite")
+    if isinstance(mode, bool) or not isinstance(mode, (int, np.integer)):
+        raise TypeError("mode must be an integer")
+    if mode < 1:
+        raise ValueError("mode must be positive")
+    if not np.isfinite(x_min) or not np.isfinite(x_max) or x_max <= x_min:
+        raise ValueError("finite bounds must satisfy x_max > x_min")
+
+    length = x_max - x_min
+    wave_number = 2.0 * np.pi * mode / length
+    angles = wave_number * (edges - x_min) + phase
+    sine_averages = (np.cos(angles[:-1]) - np.cos(angles[1:])) / (
+        wave_number * np.diff(edges)
+    )
+    decay = np.exp(-diffusivity * wave_number**2 * time)
+    return mean + amplitude * decay * sine_averages

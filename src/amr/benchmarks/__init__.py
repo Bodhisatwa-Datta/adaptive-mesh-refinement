@@ -5,6 +5,7 @@ from amr.benchmarks.burgers import exact_smooth_solution, smooth_periodic_profil
 from amr.benchmarks.diffusion import (
     periodic_gaussian_diffusion,
     periodic_gaussian_diffusion_cell_averages,
+    periodic_sine_diffusion_cell_averages,
 )
 
 __all__ = [
@@ -12,6 +13,7 @@ __all__ = [
     "gaussian",
     "periodic_gaussian_diffusion",
     "periodic_gaussian_diffusion_cell_averages",
+    "periodic_sine_diffusion_cell_averages",
     "sinusoid",
     "smooth_periodic_profile",
     "square_pulse",

@@ -1,5 +1,7 @@
 # Adaptive Mesh Refinement for PDEs
 
+[![Tests](https://github.com/Bodhisatwa-Datta/adaptive-mesh-refinement/actions/workflows/ci.yml/badge.svg)](https://github.com/Bodhisatwa-Datta/adaptive-mesh-refinement/actions/workflows/ci.yml)
+
 A scientific Python project building a validated adaptive mesh refinement (AMR) framework from a conservative uniform-grid foundation. Development is intentionally sequential: the uniform advection solver was established and verified first, and the AMR hierarchy now builds directly on that numerical baseline.
 
 ![Gaussian advection and measured grid convergence](figures/gaussian_advection_convergence.png)
@@ -8,11 +10,14 @@ A scientific Python project building a validated adaptive mesh refinement (AMR) 
 
 - Uniform, cell-centred one-dimensional finite-volume grid
 - First-order upwind flux for positive, zero, and negative velocities
+- Second-order MC-limited MUSCL advection with SSP-RK2 integration
+- Shared tested slope-limiter and reconstruction utilities
 - Periodic ghost-cell boundary conditions
 - CFL-controlled forward-Euler timestepping with an exact final time
 - Gaussian, square-pulse, and sinusoidal periodic profiles
 - Exact translated solutions, $L_1$, $L_2$, and $L_\infty$ errors
 - Discrete mass-conservation diagnostics and a reproducible convergence benchmark
+- Discrete periodic total-variation diagnostics and TVD regression tests
 - Tree-structured 1D patches with physical bounds and parent/child relationships
 - Integer refinement ratios, with $r=2$ as the default
 - Absolute and normalized gradient indicators with configurable thresholds
@@ -31,16 +36,20 @@ A scientific Python project building a validated adaptive mesh refinement (AMR) 
 - Flux-register refluxing at coarse-fine interfaces
 - Composite conservation to floating-point roundoff with refluxing
 - Conservative uniform-grid inviscid Burgers solver with local Rusanov flux
+- Second-order MC-limited Burgers solver with Rusanov fluxes and SSP-RK2
 - Pre-shock characteristic solution and measured Burgers convergence study
 - Dynamic, subcycled, refluxed Burgers AMR with state-dependent CFL control
 - Shock-focused refinement and comparison with a high-resolution reference
 - Explicit finite-volume diffusion with the parabolic stability restriction
 - Analytical periodic Gaussian diffusion and measured second-order convergence
 - Exact analytical finite-volume Gaussian cell averages
+- Exact finite-volume Fourier-mode decay validation
+- Exact discrete Fourier amplification diagnostic for diffusion timesteps
 - Limited-linear monotone transfer and smooth quadratic transfer
 - Dynamic, refluxed AMR diffusion with linear coarse-fine interpolation
 - Parabolic subcycling with $r^2$ fine steps per coarse step
 - Repeated AMR diffusion accuracy/runtime and refinement-sensitivity benchmarks
+- Automated tests on Python 3.10 through 3.13 with GitHub Actions
 
 ## Implementation progress
 
@@ -59,6 +68,13 @@ The project has been implemented in a deliberate numerical sequence:
 11. Limited-linear conservative prolongation and linear coarse-fine ghost interpolation were added before coupling diffusion to dynamic, refluxed AMR with parabolic subcycling.
 12. A repeated diffusion benchmark then measured resolution scaling, update-count compression, runtime, and sensitivity to refinement thresholds and buffer widths.
 13. Diffusion validation was corrected to initialize and compare true analytical cell averages; smooth conservative quadratic prolongation then reduced the AMR transfer error close to the uniform fine-grid result.
+14. Continuous integration was added to install, compile, and test the complete package across Python 3.10 through 3.13 on every push and pull request.
+15. A decaying periodic Fourier mode was added as an independent diffusion validation using exact finite-volume averages.
+16. The explicit stencil's exact discrete Fourier amplification factor was exposed and verified against numerical updates from low through Nyquist modes.
+17. A second-order uniform advection solver was implemented with limited MUSCL reconstruction and SSP-RK2 integration, then validated against exact periodic translation.
+18. The second-order framework was extended to uniform Burgers flow with local Rusanov fluxes and validated before shock formation and through bounded shock evolution.
+19. The duplicated limiter implementations were consolidated into one tested reconstruction module shared by both second-order solvers and conservative AMR prolongation.
+20. A discrete total-variation diagnostic was added and used to verify TVD behavior for limited square-pulse advection and post-shock Burgers evolution.
 
 The hierarchy is generated directly from solution-based gradient flags and can be advanced with either static or dynamically replaced refined regions.
 
@@ -97,6 +113,21 @@ A Gaussian of width $0.07$ was transported to $t=0.5$ on the periodic domain $[0
 | 400 | 4.2252e-3 | 7.5427e-3 | 2.4571e-2 | 0.965 | 2.78e-17 |
 
 The observed order tends toward the expected first-order behaviour. Mass conservation is at floating-point roundoff for all four cases. This validates the present uniform solver; it does not yet establish any AMR performance claim.
+
+## Second-order advection validation
+
+For a smooth sinusoid transported to $t=0.5$, the MC-limited MUSCL and SSP-RK2 solver gives:
+
+| Cells | First-order $L_1$ | Second-order $L_1$ | Observed second-order rate |
+|---:|---:|---:|---:|
+| 40 | 6.0513e-2 | 1.1950e-2 | — |
+| 80 | 3.0818e-2 | 3.2556e-3 | 1.876 |
+| 160 | 1.5556e-2 | 8.6125e-4 | 1.918 |
+| 320 | 7.8157e-3 | 2.2050e-4 | 1.966 |
+
+![First- and second-order advection convergence](figures/advection_second_order_convergence.png)
+
+The limiter keeps an advected square pulse within its initial bounds, while periodic mass remains conserved to roundoff. This higher-order solver is currently uniform-grid only and has not yet been coupled to AMR.
 
 ## Static AMR advection validation
 
@@ -158,6 +189,14 @@ The uniform Burgers solver is compared at $t=0.2$ with the characteristic soluti
 
 ![Smooth Burgers convergence](figures/burgers_smooth_convergence.png)
 
+## Second-order Burgers validation
+
+The MC-limited MUSCL/Rusanov solver with SSP-RK2 gives pre-shock $L_1$ errors $3.3435\times10^{-4}$, $8.7400\times10^{-5}$, $2.1226\times10^{-5}$, and $5.3484\times10^{-6}$ on 50, 100, 200, and 400 cells. The observed orders are 1.936, 2.042, and 1.989. At 400 cells its error is about 69 times smaller than the first-order Rusanov result.
+
+![First- and second-order Burgers convergence](figures/burgers_second_order_convergence.png)
+
+Periodic mass is conserved to roundoff, and the limiter keeps the solution within its initial range through the tested post-shock evolution. The higher-order solver is currently uniform-grid only.
+
 ## Burgers shock tracking
 
 At $t=1.0>t_s$, the smooth initial condition has formed a periodic shock. Dynamic AMR concentrates level one at that shock and is compared with a uniform $N=2048$ numerical reference.
@@ -186,6 +225,10 @@ A periodic Gaussian is diffused with $D=0.01$ to $t=0.05$. The centred finite-vo
 ![Gaussian diffusion convergence](figures/diffusion_gaussian_convergence.png)
 
 Initial data and errors use analytical averages integrated over each finite-volume cell, rather than point samples at cell centres. The measured rate is second order in space, and mass remains conserved to floating-point roundoff.
+
+The independent mode-two Fourier benchmark gives successive $L_1$ orders 2.021, 2.005, and 2.001 on 40, 80, 160, and 320 cells. Its displayed mass change is zero at every resolution.
+
+![Fourier-mode diffusion convergence](figures/diffusion_fourier_convergence.png)
 
 ## Dynamic AMR diffusion
 
@@ -235,12 +278,15 @@ Run the automated tests, Gaussian convergence benchmark, and static hierarchy ex
 ```bash
 python -m pytest
 python examples/advection_1d/run_gaussian.py
+python examples/advection_1d/run_second_order_validation.py
 python examples/amr_1d/build_static_hierarchy.py
 python examples/amr_1d/run_static_advection.py
 python examples/amr_1d/run_dynamic_advection.py
 python examples/burgers_1d/run_smooth_validation.py
+python examples/burgers_1d/run_second_order_validation.py
 python examples/burgers_1d/run_shock_amr.py
 python examples/diffusion_1d/run_gaussian_validation.py
+python examples/diffusion_1d/run_fourier_validation.py
 python examples/diffusion_1d/run_amr_diffusion.py
 python benchmarks/performance/run_advection_benchmark.py --repeats 7
 python benchmarks/performance/run_diffusion_benchmark.py --repeats 15 --sensitivity-repeats 15
@@ -274,11 +320,11 @@ docs/
 
 ## Limitations
 
-Advection and Burgers use first-order spatial reconstruction and are numerically diffusive. Time-dependent AMR supports linear advection, inviscid Burgers' equation, and explicit diffusion on one refined level. Refinement ratio two is the validated time-dependent configuration. Smooth conservative quadratic prolongation is not monotonicity preserving and is used only for the smooth diffusion benchmark; limited-linear transfer remains available for nonsmooth fields. Higher-order flux reconstruction and more than one time-dependent fine level are not implemented. Explicit diffusion requires timesteps proportional to $\Delta x^2$, so a ratio-$r$ fine level takes $r^2$ substeps. Repeated advection and diffusion timings show that the current Python AMR implementation is slower than uniform arrays for the tested problem sizes despite reducing update counts.
+The AMR advection and Burgers solvers still use first-order spatial reconstruction; the second-order advection and Burgers solvers are currently uniform-grid only. Time-dependent AMR supports linear advection, inviscid Burgers' equation, and explicit diffusion on one refined level. Refinement ratio two is the validated time-dependent configuration. Smooth conservative quadratic prolongation is not monotonicity preserving and is used only for the smooth diffusion benchmark; limited-linear transfer remains available for nonsmooth fields. More than one time-dependent fine level is not implemented. Explicit diffusion requires timesteps proportional to $\Delta x^2$, so a ratio-$r$ fine level takes $r^2$ substeps. Repeated advection and diffusion timings show that the current Python AMR implementation is slower than uniform arrays for the tested problem sizes despite reducing update counts.
 
 ## Future extensions
 
-Future work can add second-order hyperbolic reconstruction, recursively subcycled multiple refinement levels, and two-dimensional grid and patch infrastructure. Performance work should profile and reduce Python-level hierarchy and regridding overhead before claiming wall-clock acceleration.
+Future work can couple the second-order hyperbolic method to AMR, add recursively subcycled multiple refinement levels, and build two-dimensional grid and patch infrastructure. Performance work should profile and reduce Python-level hierarchy and regridding overhead before claiming wall-clock acceleration.
 
 ## License
 

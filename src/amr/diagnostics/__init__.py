@@ -7,6 +7,7 @@ from amr.diagnostics.errors import (
     composite_error_norms,
     error_norms,
 )
+from amr.diagnostics.variation import total_variation
 
 __all__ = [
     "ErrorNorms",
@@ -15,4 +16,5 @@ __all__ = [
     "composite_mass",
     "error_norms",
     "total_mass",
+    "total_variation",
 ]

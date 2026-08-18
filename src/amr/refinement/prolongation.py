@@ -3,6 +3,8 @@
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
+from amr.numerics.reconstruction import monotonized_central_slopes
+
 
 def prolong_piecewise_constant(
     coarse_values: ArrayLike, refinement_ratio: int = 2
@@ -25,13 +27,6 @@ def prolong_piecewise_constant(
     if refinement_ratio < 2:
         raise ValueError("refinement_ratio must be at least 2")
     return np.repeat(coarse, refinement_ratio)
-
-
-def _minmod(*arguments: NDArray[np.float64]) -> NDArray[np.float64]:
-    stacked = np.stack(arguments)
-    same_sign = np.all(stacked > 0.0, axis=0) | np.all(stacked < 0.0, axis=0)
-    magnitude = np.min(np.abs(stacked), axis=0)
-    return np.where(same_sign, np.sign(stacked[0]) * magnitude, 0.0)
 
 
 def prolong_conservative_linear(
@@ -59,18 +54,12 @@ def prolong_conservative_linear(
     if refinement_ratio < 2:
         raise ValueError("refinement_ratio must be at least 2")
 
-    if periodic:
-        backward = coarse - np.roll(coarse, 1)
-        forward = np.roll(coarse, -1) - coarse
+    if limit_slopes:
+        slopes = monotonized_central_slopes(coarse, periodic=periodic)
+    elif periodic:
+        slopes = 0.5 * (np.roll(coarse, -1) - np.roll(coarse, 1))
     else:
-        backward = np.empty_like(coarse)
-        forward = np.empty_like(coarse)
-        backward[1:] = coarse[1:] - coarse[:-1]
-        forward[:-1] = coarse[1:] - coarse[:-1]
-        backward[0] = forward[0]
-        forward[-1] = backward[-1]
-    centred = 0.5 * (backward + forward)
-    slopes = _minmod(2.0 * backward, centred, 2.0 * forward) if limit_slopes else centred
+        slopes = np.gradient(coarse)
     offsets = (np.arange(refinement_ratio, dtype=float) + 0.5) / refinement_ratio - 0.5
     return (coarse[:, None] + slopes[:, None] * offsets[None, :]).reshape(-1)
 

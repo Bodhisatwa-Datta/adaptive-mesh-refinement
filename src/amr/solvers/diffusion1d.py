@@ -50,6 +50,18 @@ class ExplicitDiffusion1D:
             fill_periodic_ghost_cells(field),
         )
 
+    def fourier_amplification_factor(self, mode: int, dt: float) -> float:
+        """Return the exact one-step gain of a discrete periodic Fourier mode."""
+
+        if isinstance(mode, bool) or not isinstance(mode, (int, np.integer)):
+            raise TypeError("mode must be an integer")
+        if not 0 <= mode < self.grid.n_cells:
+            raise ValueError("mode must lie in [0, n_cells)")
+        self._validate_timestep(dt)
+        diffusion_number = self.diffusivity * dt / self.grid.dx**2
+        angle = np.pi * mode / self.grid.n_cells
+        return float(1.0 - 4.0 * diffusion_number * np.sin(angle) ** 2)
+
     def interface_fluxes_with_ghost_cells(
         self,
         values: ArrayLike,
@@ -115,4 +127,3 @@ class ExplicitDiffusion1D:
             time += dt
             steps += 1
         return DiffusionResult(values, float(final_time), steps)
-

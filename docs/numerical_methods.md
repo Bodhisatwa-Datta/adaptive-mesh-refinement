@@ -30,7 +30,41 @@ The last timestep is shortened so the requested final time is reached exactly.
 
 Periodic ghost cells provide the interface states at both physical boundaries. Because every flux enters one cell and leaves another, the discrete mass $\sum_i U_i\Delta x$ is conserved to roundoff.
 
-The method is deliberately first order. Its numerical diffusion is especially visible for discontinuous profiles; higher-order reconstruction is deferred until the uniform baseline is fully established.
+This baseline method is deliberately first order. Its numerical diffusion is especially visible for discontinuous profiles; the separate higher-order method below provides the validated uniform-grid upgrade.
+
+## Second-order linear advection
+
+The higher-order uniform solver reconstructs interface states with a piecewise-linear MUSCL profile. Its dimensionless slope is the monotonized-central value
+
+$$
+s_i=\operatorname{minmod}\left(2(U_i-U_{i-1}),\frac{U_{i+1}-U_{i-1}}{2},2(U_{i+1}-U_i)\right).
+$$
+
+The left and right states at interface $i+1/2$ are
+
+$$
+U_{i+1/2}^{L}=U_i+\frac{s_i}{2},\qquad
+U_{i+1/2}^{R}=U_{i+1}-\frac{s_{i+1}}{2},
+$$
+
+and the upwind state is selected from the sign of $a$. Time integration uses the two-stage strong-stability-preserving Runge–Kutta method
+
+$$
+U^{(1)}=U^n+\Delta t L(U^n),\qquad
+U^{n+1}=\frac12U^n+\frac12\left[U^{(1)}+\Delta t L(U^{(1)})\right].
+$$
+
+The method is conservative, second order for smooth solutions, and bounded for the tested square pulse under the configured CFL limit. Limiting reduces the local order near smooth extrema and discontinuities.
+
+The monotonized-central calculation is implemented once in the PDE-independent reconstruction module. Second-order advection, second-order Burgers, and conservative limited-linear AMR prolongation use the same tested limiter implementation.
+
+For a periodic sequence of cell averages, the discrete total variation is
+
+\[
+\operatorname{TV}(U) = \sum_i \lvert U_{i+1} - U_i \rvert,
+\]
+
+where the final difference wraps from the last cell to the first. Regression tests verify that this quantity does not increase for limited square-pulse advection or post-shock Burgers evolution.
 
 ## Synchronized AMR update
 
@@ -136,6 +170,8 @@ $$
 
 Rusanov fluxes at both sides of each fine patch are accumulated over the fine substeps and used for reflux correction.
 
+The second-order uniform Burgers solver applies the same MC-limited MUSCL reconstruction and SSP-RK2 formula used by second-order linear advection. Reconstructed left and right states enter the local Rusanov flux, and the timestep is recomputed from the evolving maximum absolute cell state. The limiter maintains bounded shock evolution in the tested case while retaining second-order convergence before shock formation.
+
 ## Explicit diffusion
 
 The diffusion solver advances
@@ -159,6 +195,14 @@ $$
 \Delta t\leq C_D\frac{\Delta x^2}{2D},
 \qquad 0<C_D\leq1.
 $$
+
+For discrete periodic Fourier mode $m$ on an $N$-cell grid, one timestep has the exact amplification factor
+
+$$
+G_m=1-4\frac{D\Delta t}{\Delta x^2}\sin^2\left(\frac{\pi m}{N}\right).
+$$
+
+The solver exposes this factor as a diagnostic, and automated tests verify the complete update against it for low, intermediate, and Nyquist modes. The stability restriction follows from requiring the most oscillatory mode to remain bounded.
 
 The final step is shortened to reach the requested time exactly. Periodic interface fluxes telescope, so the uniform solver conserves discrete mass to roundoff.
 

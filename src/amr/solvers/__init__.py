@@ -10,6 +10,8 @@ from amr.solvers.burgers1d import BurgersResult, InviscidBurgers1D
 from amr.solvers.amr_burgers1d import AMRBurgersResult, AMRInviscidBurgers1D
 from amr.solvers.diffusion1d import DiffusionResult, ExplicitDiffusion1D
 from amr.solvers.amr_diffusion1d import AMRDiffusionResult, AMRExplicitDiffusion1D
+from amr.solvers.second_order_advection1d import SecondOrderLinearAdvection1D
+from amr.solvers.second_order_burgers1d import SecondOrderInviscidBurgers1D
 
 __all__ = [
     "AMRAdvectionResult",
@@ -25,4 +27,6 @@ __all__ = [
     "InviscidBurgers1D",
     "LinearAdvection1D",
     "RegridEvent",
+    "SecondOrderLinearAdvection1D",
+    "SecondOrderInviscidBurgers1D",
 ]

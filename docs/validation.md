@@ -25,6 +25,14 @@ Run `python examples/advection_1d/run_gaussian.py` after installing the package.
 
 For $N=50,100,200,400$ at $t=0.5$, the measured $L_1$ errors are respectively $2.9581\times10^{-2}$, $1.5982\times10^{-2}$, $8.2487\times10^{-3}$, and $4.2252\times10^{-3}$. The successive observed orders are $0.888$, $0.954$, and $0.965$, approaching the theoretical first-order rate. Absolute mass errors are between $2.78\times10^{-17}$ and $8.33\times10^{-17}$.
 
+## Second-order advection
+
+`examples/advection_1d/run_second_order_validation.py` transports a smooth periodic sinusoid with $a=1$, $C_{\mathrm{CFL}}=0.6$, and final time $t=0.5$. It compares the first-order upwind solver with MC-limited MUSCL reconstruction and SSP-RK2 time integration.
+
+At resolutions 40, 80, 160, and 320, second-order $L_1$ errors are $1.1950\times10^{-2}$, $3.2556\times10^{-3}$, $8.6125\times10^{-4}$, and $2.2050\times10^{-4}$. Successive orders are 1.876, 1.918, and 1.966. The corresponding first-order errors are $6.0513\times10^{-2}$, $3.0818\times10^{-2}$, $1.5556\times10^{-2}$, and $7.8157\times10^{-3}$. At the finest resolution the higher-order error is about 35 times smaller. Signed mass changes remain below $8\times10^{-17}$.
+
+Automated tests additionally cover positive, negative, and zero velocities, CFL rejection, and bounded transport of a discontinuous square pulse. The benchmark writes `benchmarks/convergence/advection_1d_second_order.csv` and `figures/advection_second_order_convergence.png`.
+
 ## AMR infrastructure checks
 
 Transfer tests use refinement ratios two, three, and four. They verify for every parent cell that prolongation followed by restriction recovers the original average and that
@@ -81,6 +89,8 @@ $$
 
 The validation uses $t=0.2<t_s$ and solves the characteristic-foot equation by Newton iteration. At resolutions 50, 100, 200, and 400, measured $L_1$ errors are $2.3678\times10^{-3}$, $1.1509\times10^{-3}$, $5.5984\times10^{-4}$, and $2.7838\times10^{-4}$. Successive orders are 1.041, 1.040, and 1.008. Periodic mass changes remain at floating-point roundoff.
 
+`examples/burgers_1d/run_second_order_validation.py` repeats the pre-shock study with MC-limited MUSCL reconstruction, local Rusanov fluxes, and SSP-RK2. At the same resolutions, $L_1$ errors are $3.3435\times10^{-4}$, $8.7400\times10^{-5}$, $2.1226\times10^{-5}$, and $5.3484\times10^{-6}$. Successive orders are 1.936, 2.042, and 1.989. At 400 cells this is approximately 69 times smaller than the first-order error measured with the same $C_{\mathrm{CFL}}=0.6$. Mass remains conserved to roundoff, and a separate test verifies no new extrema through $t=1.0$, after shock formation.
+
 ## Burgers shock refinement
 
 The same sinusoidal initial condition is evolved to $t=1.0$, beyond the analytical shock time. Because the classical characteristic solution is no longer valid, errors are calculated against a uniform $N=2048$ Rusanov reference and are explicitly labelled as numerical-reference errors.
@@ -94,6 +104,16 @@ The AMR solution remains within the initial range $[0.3,0.7]$, regridding change
 `examples/diffusion_1d/run_gaussian_validation.py` evolves a periodic image-sum Gaussian with $D=0.01$ to $t=0.05$. The initial state and analytical comparison are exact integrals over each finite-volume cell, not point samples at cell centres. Resolutions 50, 100, 200, and 400 give measured $L_1$ errors $4.4887\times10^{-4}$, $1.1375\times10^{-4}$, $2.9126\times10^{-5}$, and $7.2632\times10^{-6}$. The successive observed orders are 1.980, 1.965, and 2.004. Mass changes remain at or below $2.78\times10^{-17}$.
 
 The script writes `benchmarks/convergence/diffusion_1d_gaussian.csv` and `figures/diffusion_gaussian_convergence.png`. Automated tests also check the stability limit, exact final time, uniform-state preservation, zero diffusivity, and rejection of unstable timesteps.
+
+## Periodic Fourier-mode diffusion
+
+`examples/diffusion_1d/run_fourier_validation.py` provides an independent smooth test using mode $m=2$. For wave number $k=2\pi m/L$, the exact state
+
+$$
+u(x,t)=\bar{u}+A e^{-Dk^2t}\sin(k(x-x_{\min})+\phi)
+$$
+
+is integrated analytically over every finite-volume cell. At resolutions 40, 80, 160, and 320, measured $L_1$ errors are $1.0903\times10^{-4}$, $2.6869\times10^{-5}$, $6.6934\times10^{-6}$, and $1.6719\times10^{-6}$. Successive orders are 2.021, 2.005, and 2.001, and the displayed mass change is zero for every grid. The script writes `benchmarks/convergence/diffusion_1d_fourier.csv` and `figures/diffusion_fourier_convergence.png`.
 
 ## Dynamic AMR diffusion
 
