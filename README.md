@@ -2,15 +2,22 @@
 
 [![Tests](https://github.com/Bodhisatwa-Datta/adaptive-mesh-refinement/actions/workflows/ci.yml/badge.svg)](https://github.com/Bodhisatwa-Datta/adaptive-mesh-refinement/actions/workflows/ci.yml)
 
-A scientific Python project building a validated adaptive mesh refinement (AMR) framework from a conservative uniform-grid foundation. Development is intentionally sequential: the uniform advection solver was established and verified first, and the AMR hierarchy now builds directly on that numerical baseline.
+A scientific Python project building a validated adaptive mesh refinement (AMR) framework from conservative uniform-grid foundations. Development is intentionally sequential: the complete one-dimensional AMR framework was established and verified first, followed by a validated two-dimensional uniform-grid baseline.
 
 ![Gaussian advection and measured grid convergence](figures/gaussian_advection_convergence.png)
 
 ## Current capabilities
 
 - Uniform, cell-centred one-dimensional finite-volume grid
+- Uniform two-dimensional Cartesian grid with an explicit `(ny, nx)` field convention
+- Rectangular 2D patches and a multilevel tree hierarchy
 - First-order upwind flux for positive, zero, and negative velocities
 - Second-order MC-limited MUSCL advection with SSP-RK2 integration
+- Periodic first-order two-dimensional advection with an unsplit CFL limit
+- Synchronized static 2D AMR advection with four-edge refluxing
+- Subcycled dynamic 2D AMR advection with conservative patch replacement
+- Conservative explicit two-dimensional diffusion with a parabolic CFL limit
+- Dynamic refluxed 2D AMR diffusion with bilinear parent interpolation
 - Shared tested slope-limiter and reconstruction utilities
 - Periodic ghost-cell boundary conditions
 - CFL-controlled forward-Euler timestepping with an exact final time
@@ -21,13 +28,16 @@ A scientific Python project building a validated adaptive mesh refinement (AMR) 
 - Tree-structured 1D patches with physical bounds and parent/child relationships
 - Integer refinement ratios, with $r=2$ as the default
 - Absolute and normalized gradient indicators with configurable thresholds
+- Two-dimensional gradient-magnitude flags, square buffering, and deterministic connected-component boxes
 - Periodic or bounded flag buffering and deterministic region merging
 - Conservative constant, limited-linear, and smooth quadratic prolongation
+- Conservative piecewise-constant 2D prolongation and block-average restriction
 - Conservative average restriction
 - Explicit stored-cell and active leaf-cell counts
 - Coarse-fine ghost filling with fine-neighbour precedence
 - Synchronized one-level AMR advection using a finest-grid global timestep
 - Composite-grid error and conservation diagnostics
+- Two-dimensional composite mass and active/stored cell accounting
 - Conservative dynamic patch replacement with overlapping fine-data retention
 - Configurable regrid intervals and refine/derefine hysteresis
 - Regrid event, peak-cell, and cumulative-update diagnostics
@@ -49,6 +59,7 @@ A scientific Python project building a validated adaptive mesh refinement (AMR) 
 - Dynamic, refluxed AMR diffusion with linear coarse-fine interpolation
 - Parabolic subcycling with $r^2$ fine steps per coarse step
 - Repeated AMR diffusion accuracy/runtime and refinement-sensitivity benchmarks
+- Repeated 2D AMR accuracy, runtime, update-count, and traced-memory benchmark
 - Automated tests on Python 3.10 through 3.13 with GitHub Actions
 
 ## Implementation progress
@@ -75,6 +86,14 @@ The project has been implemented in a deliberate numerical sequence:
 18. The second-order framework was extended to uniform Burgers flow with local Rusanov fluxes and validated before shock formation and through bounded shock evolution.
 19. The duplicated limiter implementations were consolidated into one tested reconstruction module shared by both second-order solvers and conservative AMR prolongation.
 20. A discrete total-variation diagnostic was added and used to verify TVD behavior for limited square-pulse advection and post-shock Burgers evolution.
+21. A uniform Cartesian grid and conservative periodic two-dimensional advection solver were implemented and validated using diagonal Gaussian translation.
+22. The Cartesian baseline was extended to explicit two-dimensional diffusion and verified against analytical finite-volume Fourier-mode decay.
+23. Rectangular 2D patches, conservative transfers, gradient-selected refinement, multilevel hierarchy bookkeeping, and composite mass diagnostics were added and tested independently of PDE evolution.
+24. Coarse-fine ghost filling and synchronized 2D advection were coupled to static rectangular patches; face-averaged reflux registers restore composite conservation on all four patch edges.
+25. Two-dimensional temporal subcycling and conservative gradient-driven patch replacement were added, allowing a refluxed rectangular patch to follow diagonal transport.
+26. Explicit 2D diffusion was coupled to dynamic rectangular AMR using bilinear parent ghosts, conservative quadratic transfer, $r^2$ subcycling, and shared face-averaged refluxing.
+27. Deterministic connected-component clustering replaced the single enclosing 2D refinement box, allowing separated features to receive independent patches with configurable small-gap merging.
+28. A repeated 2D performance study measured accuracy, cell updates, wall-clock runtime, and traced peak allocations for dynamic AMR against coarse and fine uniform grids.
 
 The hierarchy is generated directly from solution-based gradient flags and can be advanced with either static or dynamically replaced refined regions.
 
@@ -84,6 +103,14 @@ The solved equation is
 
 $$
 \frac{\partial u}{\partial t}+a\frac{\partial u}{\partial x}=0.
+$$
+
+The two-dimensional uniform solver extends this to
+
+$$
+\frac{\partial u}{\partial t}
++a\frac{\partial u}{\partial x}
++b\frac{\partial u}{\partial y}=0.
 $$
 
 The uniform-grid solver also supports inviscid Burgers' equation,
@@ -128,6 +155,106 @@ For a smooth sinusoid transported to $t=0.5$, the MC-limited MUSCL and SSP-RK2 s
 ![First- and second-order advection convergence](figures/advection_second_order_convergence.png)
 
 The limiter keeps an advected square pulse within its initial bounds, while periodic mass remains conserved to roundoff. This higher-order solver is currently uniform-grid only and has not yet been coupled to AMR.
+
+## Two-dimensional advection validation
+
+The first 2D baseline transports an anisotropic Gaussian diagonally with $(a,b)=(0.7,-0.4)$ to $t=0.25$. Periodic donor-cell fluxes use the unsplit stability condition $\Delta t(|a|/\Delta x+|b|/\Delta y)\leq0.8$.
+
+| Cells per direction | $L_1$ error | Observed order | Absolute mass error |
+|---:|---:|---:|---:|
+| 24 | 1.2771e-2 | — | 0.00 |
+| 48 | 7.2312e-3 | 0.821 | 6.94e-18 |
+| 96 | 3.8980e-3 | 0.892 | 0.00 |
+| 192 | 2.0384e-3 | 0.935 | 6.94e-18 |
+
+![Two-dimensional diagonal advection and convergence](figures/advection_2d_convergence.png)
+
+The convergence rate approaches the expected first-order behavior, and total mass is conserved to roundoff. This deliberately precedes rectangular patch and 2D AMR coupling work.
+
+## Two-dimensional diffusion validation
+
+The 2D diffusion baseline evolves a separable periodic Fourier mode with $(m_x,m_y)=(1,2)$, $D=0.01$, and final time $t=0.05$. The initial condition and analytical solution are evaluated as exact finite-volume cell averages.
+
+| Cells per direction | $L_1$ error | Observed order | Signed mass change |
+|---:|---:|---:|---:|
+| 40 | 3.9123e-5 | — | 0.00 |
+| 80 | 9.7104e-6 | 2.010 | 0.00 |
+| 160 | 2.4232e-6 | 2.003 | 0.00 |
+| 320 | 6.0554e-7 | 2.001 | 0.00 |
+
+![Two-dimensional Fourier diffusion and convergence](figures/diffusion_2d_convergence.png)
+
+The measured rate is second order, the analytical and numerical fields visually coincide at the displayed resolution, and discrete mass is unchanged at every tested resolution.
+
+## Static two-dimensional AMR infrastructure
+
+The 2D hierarchy stores rectangular patches with parent-aligned physical bounds and half-open index boxes. Siblings may touch but cannot overlap, children can themselves own finer patches, and piecewise-constant prolongation plus block-average restriction preserve every parent average. A two-dimensional gradient-magnitude criterion with configurable buffering selects the displayed level-one box directly from the Gaussian field.
+
+![Gradient-selected rectangular 2D hierarchy](figures/gradient_selected_amr_hierarchy_2d.png)
+
+For this 64-by-64 base grid and refinement ratio two, the selected child gives 6,076 active leaf cells and 6,736 stored cells. Composite-mass tests cover refinement, modified fine data, restriction, and derefinement. These structural checks remain independent of the synchronized advection validation below.
+
+## Static two-dimensional AMR advection
+
+A gradient-selected rectangular patch is advanced together with a 32-by-32 periodic root grid using the finest-grid global timestep. Fine ghosts use same-level neighbors where available and otherwise sample the parent. After restriction, flux registers replace every coarse-fine interface flux by the average of its two fine-face fluxes.
+
+| Calculation | Active cells | Stored cells | Cell updates | $L_1$ error | Signed mass change |
+|---|---:|---:|---:|---:|---:|
+| Uniform 32 | 1,024 | 1,024 | 4,096 | 3.4998e-3 | 0.00 |
+| Static AMR | 2,164 | 2,544 | 17,808 | 2.0378e-3 | +6.94e-18 |
+| Uniform 64 | 4,096 | 4,096 | 28,672 | 1.7999e-3 | 0.00 |
+
+![Static refluxed two-dimensional AMR advection](figures/static_amr_advection_2d.png)
+
+The static AMR calculation reduces the coarse-grid error by about 42% and comes within 13% of the uniform fine-grid error while using 38% fewer cell updates than uniform 64. These are update counts, not runtime measurements. Refluxing conserves composite mass to roundoff for every tested velocity-sign combination, adjacent patches, and patches crossing periodic boundaries.
+
+## Dynamic two-dimensional AMR advection
+
+The moving-patch benchmark transports a narrower Gaussian from $(0.3,0.3)$ to $(0.6,0.45)$. The root takes its own CFL step, level one takes two fine substeps with time-interpolated parent ghosts, and flux registers accumulate both fine steps before refluxing. The gradient-selected box is rebuilt every two coarse steps with hysteresis and overlap-data retention.
+
+| Calculation | Final active cells | Peak active cells | Cell updates | $L_1$ error | Signed mass change |
+|---|---:|---:|---:|---:|---:|
+| Uniform 32 | 1,024 | 1,024 | 18,432 | 1.1877e-2 | -3.47e-18 |
+| Static subcycled AMR | 1,699 | 1,699 | 50,832 | 8.9020e-3 | 0.00 |
+| Dynamic subcycled AMR | 1,996 | 1,996 | 61,808 | 7.4983e-3 | +3.47e-18 |
+| Uniform 64 | 4,096 | 4,096 | 147,456 | 7.3439e-3 | 0.00 |
+
+![Dynamic subcycled two-dimensional AMR advection](figures/dynamic_amr_advection_2d.png)
+
+The patch moves from parent box $(2,17)\times(2,17)$ to $(10,28)\times(5,23)$. Dynamic AMR comes within about 2.1% of the uniform fine-grid error with about 58% fewer cell updates. Its nine patch replacements and complete evolution conserve composite mass to roundoff. No wall-clock advantage is inferred from these update counts.
+
+## Dynamic two-dimensional AMR diffusion
+
+A localized Gaussian diffuses with $D=0.01$ to $t=0.1$. Initial data and errors use analytical finite-volume averages. Each root step is accompanied by four fine steps, bilinearly interpolated parent ghosts, accumulated diffusive flux registers, and conservative quadratic initialization of newly refined cells.
+
+| Calculation | Final active cells | Peak active cells | Cell updates | $L_1$ error | Signed mass change |
+|---|---:|---:|---:|---:|---:|
+| Uniform 32 | 1,024 | 1,024 | 6,144 | 1.5008e-4 | +3.47e-18 |
+| Static subcycled AMR | 1,996 | 1,996 | 37,248 | 6.8002e-5 | 0.00 |
+| Dynamic subcycled AMR | 2,476 | 2,476 | 47,360 | 6.0601e-5 | +3.47e-18 |
+| Uniform 64 | 4,096 | 4,096 | 86,016 | 3.8134e-5 | 0.00 |
+
+![Dynamic subcycled two-dimensional AMR diffusion](figures/dynamic_amr_diffusion_2d.png)
+
+The patch expands from $(7,25)\times(7,25)$ to $(5,27)\times(5,27)$. Dynamic AMR reduces the root-grid error by about 60% and uses about 45% fewer updates than uniform 64, although the uniform fine grid remains about 37% more accurate. Both regrids and the complete evolution preserve mass to roundoff; update counts are not treated as runtime measurements.
+
+## Multi-box two-dimensional clustering
+
+Buffered 2D flags are split into deterministic eight-connected components, with each component converted to its own half-open parent-cell box. Components do not connect through periodic boundaries, which keeps distinct features near opposite domain edges in separate patches. A configurable gap can merge nearby component boxes when fewer, larger patches are preferred.
+
+For two separated Gaussian features on a 64-by-64 root grid, connected-component clustering creates boxes $(6,29)\times(11,34)$ and $(35,58)\times(30,53)$. Compared with one rectangle enclosing both features, the multi-box hierarchy reduces active cells from 10,648 to 7,270 (31.7%) and stored cells from 12,832 to 8,328 (35.1%). These are hierarchy-size measurements, not runtime claims.
+
+![Separated features represented by two refined patches](figures/multi_patch_hierarchy_2d.png)
+
+## Two-dimensional performance assessment
+
+The repeated study uses base resolutions 24, 32, and 48 for both advection and diffusion. Every case receives one untimed warm-up followed by seven complete timings; traced peak allocation is measured in a separate run so tracing overhead does not affect runtime. Initialization, initial regridding, integration, and error diagnostics are included.
+
+Relative to the uniform grid with twice the base resolution, dynamic AMR reduces update counts by 48–65% for advection and 41–62% for diffusion. Advection's traced peak is 2–25% lower. Diffusion's traced peak is 15% and 4% higher at base 24 and 32, then 19% lower at base 48. Despite the update reductions, dynamic AMR is 18–21 times slower for advection and 13–29 times slower for diffusion in this environment. Python-level hierarchy traversal, ghost filling, regridding, and reflux bookkeeping dominate these small array calculations.
+
+![Measured two-dimensional accuracy, runtime, and traced allocations](figures/two_dimensional_performance.png)
+
+The complete samples and environment metadata are stored in `benchmarks/performance/two_dimensional_accuracy_runtime_memory.csv` and `benchmarks/performance/two_dimensional_benchmark_metadata.json`. `tracemalloc` reports traced Python allocations, not whole-process resident memory, and all wall-clock measurements are machine-specific.
 
 ## Static AMR advection validation
 
@@ -279,6 +406,12 @@ Run the automated tests, Gaussian convergence benchmark, and static hierarchy ex
 python -m pytest
 python examples/advection_1d/run_gaussian.py
 python examples/advection_1d/run_second_order_validation.py
+python examples/advection_2d/run_gaussian_validation.py
+python examples/amr_2d/build_static_hierarchy.py
+python examples/amr_2d/run_static_advection.py
+python examples/amr_2d/run_dynamic_advection.py
+python examples/amr_2d/run_dynamic_diffusion.py
+python examples/amr_2d/build_multi_patch_hierarchy.py
 python examples/amr_1d/build_static_hierarchy.py
 python examples/amr_1d/run_static_advection.py
 python examples/amr_1d/run_dynamic_advection.py
@@ -287,9 +420,11 @@ python examples/burgers_1d/run_second_order_validation.py
 python examples/burgers_1d/run_shock_amr.py
 python examples/diffusion_1d/run_gaussian_validation.py
 python examples/diffusion_1d/run_fourier_validation.py
+python examples/diffusion_2d/run_fourier_validation.py
 python examples/diffusion_1d/run_amr_diffusion.py
 python benchmarks/performance/run_advection_benchmark.py --repeats 7
 python benchmarks/performance/run_diffusion_benchmark.py --repeats 15 --sensitivity-repeats 15
+python benchmarks/performance/run_2d_benchmark.py --repeats 7
 ```
 
 The scripts write measured CSV data to `benchmarks/convergence/`, `benchmarks/uniform_vs_amr/`, and `benchmarks/performance/`, with validation plots in `figures/`. Results are generated by the implementation and are not hard-coded.
@@ -300,15 +435,18 @@ The scripts write measured CSV data to `benchmarks/convergence/`, `benchmarks/un
 src/amr/
 ├── benchmarks/       # Initial conditions and analytical solutions
 ├── diagnostics/      # Errors, conservation, and mesh plotting
-├── grid/             # Uniform grid, Patch1D, and AMRHierarchy1D
+├── grid/             # Uniform 1D/2D grids, Patch1D, and AMRHierarchy1D
 ├── numerics/         # PDE-independent boundary handling
 ├── refinement/       # Criteria, prolongation, and restriction
-└── solvers/          # Uniform and one-level AMR PDE solvers
+└── solvers/          # Uniform 1D/2D and one-level AMR PDE solvers
 examples/
 ├── advection_1d/
+├── advection_2d/
+├── amr_2d/
 ├── amr_1d/
 ├── burgers_1d/
-└── diffusion_1d/
+├── diffusion_1d/
+└── diffusion_2d/
 tests/
 benchmarks/
 ├── convergence/
@@ -320,11 +458,11 @@ docs/
 
 ## Limitations
 
-The AMR advection and Burgers solvers still use first-order spatial reconstruction; the second-order advection and Burgers solvers are currently uniform-grid only. Time-dependent AMR supports linear advection, inviscid Burgers' equation, and explicit diffusion on one refined level. Refinement ratio two is the validated time-dependent configuration. Smooth conservative quadratic prolongation is not monotonicity preserving and is used only for the smooth diffusion benchmark; limited-linear transfer remains available for nonsmooth fields. More than one time-dependent fine level is not implemented. Explicit diffusion requires timesteps proportional to $\Delta x^2$, so a ratio-$r$ fine level takes $r^2$ substeps. Repeated advection and diffusion timings show that the current Python AMR implementation is slower than uniform arrays for the tested problem sizes despite reducing update counts.
+The AMR advection and Burgers solvers still use first-order spatial reconstruction; the second-order advection and Burgers solvers are currently uniform-grid only. Connected-component boxes can still over-refine empty cells inside a nonrectangular connected flag set. Time-dependent 1D and 2D solvers support one refined level; deeper recursive time integration is not implemented. Smooth conservative quadratic prolongation is not monotonicity preserving and is used only for smooth diffusion benchmarks. Explicit diffusion requires timesteps proportional to grid spacing squared. Measured 1D and 2D timings show that the current Python AMR overhead outweighs update-count reductions. Traced allocation is not a substitute for process-level resident-memory profiling.
 
 ## Future extensions
 
-Future work can couple the second-order hyperbolic method to AMR, add recursively subcycled multiple refinement levels, and build two-dimensional grid and patch infrastructure. Performance work should profile and reduce Python-level hierarchy and regridding overhead before claiming wall-clock acceleration.
+Future work can couple the second-order hyperbolic method to AMR, add recursively subcycled multiple refinement levels, and improve box generation for nonrectangular connected flag sets. Profiling can then guide vectorization and compiled kernels for the measured hierarchy-management bottlenecks, followed by process-level memory measurements at larger resolutions.
 
 ## License
 

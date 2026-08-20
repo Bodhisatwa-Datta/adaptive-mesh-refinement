@@ -25,6 +25,54 @@ Run `python examples/advection_1d/run_gaussian.py` after installing the package.
 
 For $N=50,100,200,400$ at $t=0.5$, the measured $L_1$ errors are respectively $2.9581\times10^{-2}$, $1.5982\times10^{-2}$, $8.2487\times10^{-3}$, and $4.2252\times10^{-3}$. The successive observed orders are $0.888$, $0.954$, and $0.965$, approaching the theoretical first-order rate. Absolute mass errors are between $2.78\times10^{-17}$ and $8.33\times10^{-17}$.
 
+## Two-dimensional advection
+
+`examples/advection_2d/run_gaussian_validation.py` translates an anisotropic periodic Gaussian with velocity $(0.7,-0.4)$ to $t=0.25$ on square grids with 24, 48, 96, and 192 cells per direction. The measured $L_1$ errors are $1.2771\times10^{-2}$, $7.2312\times10^{-3}$, $3.8980\times10^{-3}$, and $2.0384\times10^{-3}$. Successive orders are 0.821, 0.892, and 0.935, approaching the expected first-order rate. Absolute mass errors are no greater than $6.94\times10^{-18}$.
+
+Tests additionally exercise every combination of velocity signs, a stationary field, exact one-cell translation at CFL one, the multidimensional CFL rejection path, coordinate orientation, and field-shape validation. The benchmark writes `benchmarks/convergence/advection_2d_gaussian.csv` and `figures/advection_2d_convergence.png`.
+
+## Two-dimensional diffusion
+
+`examples/diffusion_2d/run_fourier_validation.py` evolves exact finite-volume averages of a separable periodic Fourier product with modes $(1,2)$, diffusivity $D=0.01$, and final time $t=0.05$. On grids with 40, 80, 160, and 320 cells per direction, the measured $L_1$ errors are $3.9123\times10^{-5}$, $9.7104\times10^{-6}$, $2.4232\times10^{-6}$, and $6.0554\times10^{-7}$. Successive orders are 2.010, 2.003, and 2.001. The measured mass change is exactly zero at all four resolutions.
+
+Independent tests check the multidimensional parabolic stability limit, discrete maximum principle, zero-diffusivity behavior, and exact one-step amplification for several discrete Fourier-mode pairs. The benchmark writes `benchmarks/convergence/diffusion_2d_fourier.csv` and `figures/diffusion_2d_convergence.png`.
+
+## Static two-dimensional AMR infrastructure
+
+Two-dimensional transfer tests use refinement ratios two, three, and four. They verify that repeating every coarse average over an $r\times r$ block and restricting by the block mean exactly recovers the coarse array and preserves its area integral. Hierarchy tests cover parent-edge alignment, rectangular geometry, touching siblings, overlap rejection, nested levels, stored and active cell counts, restriction before derefinement, and composite-mass preservation after fine data have changed.
+
+The static example computes buffered gradient-magnitude flags from a periodic Gaussian rather than hard-coding a patch. On a 64-by-64 base grid, the resulting parent-cell box is $(17,47)\times(21,43)$ and produces 6,076 active cells across the composite grid. `examples/amr_2d/build_static_hierarchy.py` regenerates `figures/gradient_selected_amr_hierarchy_2d.png`.
+
+The separated-feature example verifies deterministic multi-box clustering. Two Gaussian features produce parent boxes $(6,29)\times(11,34)$ and $(35,58)\times(30,53)$. The resulting hierarchy contains 7,270 active and 8,328 stored cells, compared with 10,648 active and 12,832 stored cells for one enclosing box: reductions of 31.7% and 35.1%, respectively. Tests also cover deterministic ordering, configurable gap merging, separation across periodic domain edges, hierarchy attachment, and conservation during multi-patch replacement. `examples/amr_2d/build_multi_patch_hierarchy.py` writes `benchmarks/uniform_vs_amr/multi_box_clustering_2d.csv` and `figures/multi_patch_hierarchy_2d.png`.
+
+## Static two-dimensional AMR advection
+
+`examples/amr_2d/run_static_advection.py` compares a 32-by-32 root grid, a gradient-selected static level-one patch, and a uniform 64-by-64 grid for diagonal Gaussian transport. Their measured $L_1$ errors are $3.4998\times10^{-3}$, $2.0378\times10^{-3}$, and $1.7999\times10^{-3}$. The AMR calculation uses 17,808 cell updates versus 28,672 on the uniform fine grid and has a signed mass change of $6.94\times10^{-18}$.
+
+Automated tests verify all velocity-sign combinations, exact uniform-state preservation, equivalence to the uniform solver when no patches exist, face-area averaging, fine-fine interface exclusion, periodic patch boundaries, and explicit rejection of deeper time-dependent levels. The benchmark writes `benchmarks/uniform_vs_amr/advection_2d_static_amr.csv` and `figures/static_amr_advection_2d.png`.
+
+## Dynamic two-dimensional AMR advection
+
+`examples/amr_2d/run_dynamic_advection.py` transports a Gaussian diagonally to $t=0.5$ with root-level timesteps, two fine substeps per root step, refluxing, and patch replacement every two root steps. The rectangular patch moves from $(2,17)\times(2,17)$ to $(10,28)\times(5,23)$. The coarse, static AMR, dynamic AMR, and uniform fine $L_1$ errors are respectively $1.1877\times10^{-2}$, $8.9020\times10^{-3}$, $7.4983\times10^{-3}$, and $7.3439\times10^{-3}$.
+
+Dynamic AMR uses 61,808 cell updates compared with 147,456 for uniform 64. Its nine recorded regrid events individually preserve mass to roundoff, and the final signed mass change is $3.47\times10^{-18}$. Tests separately verify subcycled uniform states, root and fine CFL accounting, accumulated flux-register conservation, overlap-data retention, hysteresis, complete derefinement, and diagonal box motion. The benchmark writes `benchmarks/uniform_vs_amr/advection_2d_dynamic_amr.csv` and `figures/dynamic_amr_advection_2d.png`.
+
+## Dynamic two-dimensional AMR diffusion
+
+`examples/amr_2d/run_dynamic_diffusion.py` evolves analytical cell averages of a localized periodic Gaussian to $t=0.1$ with $D=0.01$. The refinement box expands from $(7,25)\times(7,25)$ to $(5,27)\times(5,27)$. Uniform 32, static AMR, dynamic AMR, and uniform 64 give $L_1$ errors $1.5008\times10^{-4}$, $6.8002\times10^{-5}$, $6.0601\times10^{-5}$, and $3.8134\times10^{-5}$.
+
+Dynamic AMR uses 47,360 cell updates compared with 86,016 for uniform 64. Its two regrid events use conservative quadratic initialization and retain overlap data. Bilinear parent ghost interpolation, $r^2=4$ fine substeps, shared 2D refluxing, and the complete integration preserve mass to roundoff. The benchmark writes `benchmarks/uniform_vs_amr/diffusion_2d_dynamic_amr.csv` and `figures/dynamic_amr_diffusion_2d.png`.
+
+## Repeated two-dimensional performance study
+
+`benchmarks/performance/run_2d_benchmark.py` measures advection and diffusion at base resolutions 24, 32, and 48. Each uniform coarse, dynamic AMR, and uniform twice-base case receives one untimed warm-up and seven complete timings. A separate complete run records peak traced allocations without contaminating the runtime samples. The timed scope includes initialization, initial regridding, integration, and diagnostics.
+
+For advection, dynamic AMR reduces uniform fine-grid update counts from 62,208, 147,456, and 497,664 to 32,368, 61,808, and 175,984. The corresponding median runtimes are 0.07408 s, 0.10192 s, and 0.23677 s for AMR versus 0.00347 s, 0.00554 s, and 0.01163 s for the uniform fine grids. Traced peaks are 0.19, 0.26, and 0.60 MiB for AMR versus 0.20, 0.35, and 0.78 MiB for uniform fine.
+
+For diffusion, dynamic AMR reduces uniform fine-grid update counts from 27,648, 86,016, and 433,152 to 16,192, 47,360, and 166,208. Median runtimes are 0.05324 s, 0.13946 s, and 0.36828 s for AMR versus 0.00417 s, 0.00481 s, and 0.01311 s for uniform fine. Traced peaks are 0.17, 0.27, and 0.46 MiB for AMR versus 0.15, 0.26, and 0.57 MiB for uniform fine.
+
+Thus the current Python implementation converts fewer cell updates into neither lower runtime nor uniformly lower traced allocation. `tracemalloc` does not measure total process resident memory, and the recorded timings are specific to the platform captured in `benchmarks/performance/two_dimensional_benchmark_metadata.json`. Raw results are in `benchmarks/performance/two_dimensional_accuracy_runtime_memory.csv`; the script regenerates `figures/two_dimensional_performance.png`.
+
 ## Second-order advection
 
 `examples/advection_1d/run_second_order_validation.py` transports a smooth periodic sinusoid with $a=1$, $C_{\mathrm{CFL}}=0.6$, and final time $t=0.5$. It compares the first-order upwind solver with MC-limited MUSCL reconstruction and SSP-RK2 time integration.

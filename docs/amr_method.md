@@ -12,6 +12,25 @@ valid cells and has spacing $\Delta x_f=\Delta x_c/r$. Ratios greater than one a
 
 `n_stored_cells` counts arrays on every level, including covered coarse cells. `n_active_cells` counts leaf cells and excludes coarse cells covered by children. Keeping these definitions separate prevents ambiguous cost reporting later.
 
+## Rectangular two-dimensional hierarchy
+
+The 2D extension uses arrays with shape $(N_y,N_x)$ and represents a child region as two half-open parent ranges, $[j_s,j_e)\times[i_s,i_e)$. For the same refinement ratio $r$ in each coordinate, the child shape is
+
+$$
+(N_y^f,N_x^f)=\left(r(j_e-j_s),r(i_e-i_s)\right).
+$$
+
+Physical bounds coincide with the selected parent cell edges. Rectangular siblings may touch along an edge or corner but cannot overlap in area. The tree supports nested static patches and counts active leaf cells by subtracting each non-overlapping child rectangle from its parent.
+
+Piecewise-constant 2D prolongation copies each parent average to its $r\times r$ fine children. Restriction applies the block average
+
+$$
+U_{i,j}^c=\frac{1}{r^2}\sum_{p=0}^{r-1}\sum_{q=0}^{r-1}
+U_{ri+p,rj+q}^f,
+$$
+
+so the area integral is preserved exactly apart from floating-point summation. The 2D composite-mass diagnostic excludes rectangular parent regions covered by children at every tree level.
+
 ## Refinement criterion
 
 The absolute centred-gradient indicator is
@@ -28,6 +47,8 @@ R_i^{\mathrm{norm}}=
 $$
 
 Cells are flagged only when $R_i$ is strictly greater than a configurable threshold. Flags can be expanded by a configurable number of buffer cells, with either periodic wrapping or clipping at physical boundaries. Contiguous ranges are extracted deterministically, and ranges separated by a configurable small gap may be merged.
+
+In two dimensions, centred differences in each coordinate form the gradient-magnitude indicator. Flags can be square-buffered with periodic wrapping or bounded clipping. Deterministic eight-connected-component clustering converts each separated flagged region into its own half-open rectangular box. Connectivity itself does not wrap across periodic boundaries, so features near opposite edges remain separate patches. An optional nonnegative merge gap combines boxes whose separation in both coordinates is no greater than the configured number of parent cells.
 
 ## Conservative prolongation
 
@@ -102,7 +123,7 @@ $$
 R_{\mathrm{derefine}} \leq R_{\mathrm{refine}}.
 $$
 
-The union of newly flagged and retained cells is buffered and converted into merged parent-cell ranges. If these ranges differ from the current layout, level one is replaced conservatively:
+The union of newly flagged and retained cells is buffered and converted into merged parent-cell ranges in 1D or connected-component boxes in 2D. If these regions differ from the current layout, level one is replaced conservatively:
 
 1. Restrict every old fine patch onto the root.
 2. Initialize each requested patch by conservative prolongation.
@@ -113,4 +134,4 @@ Restriction makes the root integral equal to the old composite integral. Prolong
 
 ## Not yet implemented
 
-More than one time-dependent fine level and higher-order flux reconstruction within AMR remain future work. Refluxing is implemented for the one-level advection, Burgers, and diffusion solvers. Conservative limited-linear and smooth quadratic prolongation and linear coarse-parent ghost interpolation are available, but multilevel recursive space-time interpolation is not.
+More than one time-dependent fine level and higher-order flux reconstruction within AMR remain future work. Refluxing is implemented for one-level 1D and 2D advection and diffusion, as well as 1D Burgers flow. Conservative quadratic prolongation and bilinear coarse-parent ghost interpolation support smooth 2D diffusion. Multilevel recursive space-time interpolation and more efficient decomposition of nonrectangular connected 2D flag sets are not yet implemented.

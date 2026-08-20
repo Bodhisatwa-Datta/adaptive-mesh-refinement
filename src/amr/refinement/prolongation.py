@@ -29,6 +29,64 @@ def prolong_piecewise_constant(
     return np.repeat(coarse, refinement_ratio)
 
 
+def prolong_piecewise_constant_2d(
+    coarse_values: ArrayLike, refinement_ratio: int = 2
+) -> NDArray[np.float64]:
+    """Split each 2D coarse average into ``r x r`` equal fine averages."""
+
+    coarse = np.asarray(coarse_values, dtype=float)
+    if coarse.ndim != 2 or coarse.size == 0:
+        raise ValueError("coarse_values must be a non-empty two-dimensional array")
+    if not np.all(np.isfinite(coarse)):
+        raise ValueError("coarse_values must be finite")
+    if isinstance(refinement_ratio, bool) or not isinstance(
+        refinement_ratio, (int, np.integer)
+    ):
+        raise TypeError("refinement_ratio must be an integer")
+    if refinement_ratio < 2:
+        raise ValueError("refinement_ratio must be at least 2")
+    return np.repeat(
+        np.repeat(coarse, refinement_ratio, axis=0), refinement_ratio, axis=1
+    )
+
+
+def prolong_conservative_quadratic_2d(
+    coarse_values: ArrayLike,
+    refinement_ratio: int = 2,
+    *,
+    periodic: bool = True,
+) -> NDArray[np.float64]:
+    """Apply conservative quadratic prolongation successively in x and y."""
+
+    coarse = np.asarray(coarse_values, dtype=float)
+    if coarse.ndim != 2 or min(coarse.shape) < 3:
+        raise ValueError("coarse_values must contain at least three cells per axis")
+    if not np.all(np.isfinite(coarse)):
+        raise ValueError("coarse_values must be finite")
+    if isinstance(refinement_ratio, bool) or not isinstance(
+        refinement_ratio, (int, np.integer)
+    ):
+        raise TypeError("refinement_ratio must be an integer")
+    if refinement_ratio < 2:
+        raise ValueError("refinement_ratio must be at least 2")
+
+    refined_x = np.vstack(
+        [
+            prolong_conservative_quadratic(row, refinement_ratio, periodic=periodic)
+            for row in coarse
+        ]
+    )
+    refined_xy = np.vstack(
+        [
+            prolong_conservative_quadratic(
+                refined_x[:, column], refinement_ratio, periodic=periodic
+            )
+            for column in range(refined_x.shape[1])
+        ]
+    ).T
+    return refined_xy
+
+
 def prolong_conservative_linear(
     coarse_values: ArrayLike,
     refinement_ratio: int = 2,

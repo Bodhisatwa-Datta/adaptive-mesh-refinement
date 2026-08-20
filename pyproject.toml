@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "adaptive-mesh-refinement"
-version = "0.7.0"
+version = "0.15.0"
 description = "Validated finite-volume foundations for an adaptive mesh refinement PDE framework"
 readme = "README.md"
 requires-python = ">=3.10"

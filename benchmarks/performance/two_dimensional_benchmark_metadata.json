@@ -1,0 +1,10 @@
+{
+  "python": "3.12.13",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "numpy": "2.3.5",
+  "repeats": 7,
+  "timer": "time.perf_counter",
+  "memory": "tracemalloc peak from one separate complete calculation",
+  "scope": "initialization, initial regrid, integration, and diagnostics",
+  "warm_up": "one untimed run per case"
+}

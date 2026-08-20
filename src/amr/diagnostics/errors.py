@@ -7,7 +7,9 @@ import numpy as np
 from numpy.typing import ArrayLike
 
 from amr.grid.hierarchy import AMRHierarchy1D
+from amr.grid.hierarchy2d import AMRHierarchy2D
 from amr.grid.patch import Patch1D
+from amr.grid.patch2d import Patch2D
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,5 +108,87 @@ def composite_cell_average_error_norms(
     return ErrorNorms(
         l1=l1_integral / length,
         l2=float(np.sqrt(l2_integral / length)),
+        linf=linf,
+    )
+
+
+def composite_error_norms_2d(
+    hierarchy: AMRHierarchy2D,
+    exact: Callable[[np.ndarray, np.ndarray], np.ndarray],
+) -> ErrorNorms:
+    """Calculate physical-space error norms over rectangular 2D leaf cells."""
+
+    l1_integral = 0.0
+    l2_integral = 0.0
+    linf = 0.0
+
+    def accumulate(patch: Patch2D) -> None:
+        nonlocal l1_integral, l2_integral, linf
+        covered = np.zeros(patch.grid.shape, dtype=bool)
+        for child in patch.children:
+            if child.parent_range is None:
+                raise RuntimeError("Hierarchy invariant violated: missing parent range")
+            (y_start, y_stop), (x_start, x_stop) = child.parent_range
+            covered[y_start:y_stop, x_start:x_stop] = True
+        if np.any(~covered):
+            x, y = patch.grid.cell_centres
+            difference = np.abs(
+                patch.values[~covered] - np.asarray(exact(x, y))[~covered]
+            )
+            area = patch.grid.cell_area
+            l1_integral += float(np.sum(difference) * area)
+            l2_integral += float(np.sum(difference**2) * area)
+            linf = max(linf, float(np.max(difference)))
+        for child in patch.children:
+            accumulate(child)
+
+    accumulate(hierarchy.root)
+    root = hierarchy.root.grid
+    domain_area = (root.x_max - root.x_min) * (root.y_max - root.y_min)
+    return ErrorNorms(
+        l1=l1_integral / domain_area,
+        l2=float(np.sqrt(l2_integral / domain_area)),
+        linf=linf,
+    )
+
+
+def composite_cell_average_error_norms_2d(
+    hierarchy: AMRHierarchy2D,
+    exact_cell_averages: Callable[[np.ndarray, np.ndarray], np.ndarray],
+) -> ErrorNorms:
+    """Calculate 2D composite norms against analytical cell averages."""
+
+    l1_integral = 0.0
+    l2_integral = 0.0
+    linf = 0.0
+
+    def accumulate(patch: Patch2D) -> None:
+        nonlocal l1_integral, l2_integral, linf
+        exact = np.asarray(
+            exact_cell_averages(patch.grid.x_edges, patch.grid.y_edges),
+            dtype=float,
+        )
+        patch.grid.validate_field(exact)
+        covered = np.zeros(patch.grid.shape, dtype=bool)
+        for child in patch.children:
+            if child.parent_range is None:
+                raise RuntimeError("Hierarchy invariant violated: missing parent range")
+            (y_start, y_stop), (x_start, x_stop) = child.parent_range
+            covered[y_start:y_stop, x_start:x_stop] = True
+        if np.any(~covered):
+            difference = np.abs(patch.values[~covered] - exact[~covered])
+            area = patch.grid.cell_area
+            l1_integral += float(np.sum(difference) * area)
+            l2_integral += float(np.sum(difference**2) * area)
+            linf = max(linf, float(np.max(difference)))
+        for child in patch.children:
+            accumulate(child)
+
+    accumulate(hierarchy.root)
+    root = hierarchy.root.grid
+    domain_area = (root.x_max - root.x_min) * (root.y_max - root.y_min)
+    return ErrorNorms(
+        l1=l1_integral / domain_area,
+        l2=float(np.sqrt(l2_integral / domain_area)),
         linf=linf,
     )

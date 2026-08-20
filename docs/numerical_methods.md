@@ -32,6 +32,46 @@ Periodic ghost cells provide the interface states at both physical boundaries. B
 
 This baseline method is deliberately first order. Its numerical diffusion is especially visible for discontinuous profiles; the separate higher-order method below provides the validated uniform-grid upgrade.
 
+## Two-dimensional linear advection
+
+The two-dimensional baseline solves
+
+$$
+\frac{\partial u}{\partial t}+a\frac{\partial u}{\partial x}
++b\frac{\partial u}{\partial y}=0
+$$
+
+on a periodic Cartesian grid. Arrays have shape $(N_y,N_x)$, so axis zero is the y direction and axis one is the x direction. Donor-cell upwinding is applied independently to the conservative x and y flux differences in one unsplit forward-Euler update. Stability requires
+
+$$
+\Delta t\left(\frac{|a|}{\Delta x}+\frac{|b|}{\Delta y}\right)
+\leq C_{\mathrm{CFL}},\qquad 0<C_{\mathrm{CFL}}\leq1.
+$$
+
+Periodic neighbors are obtained by array shifts. The summed flux differences telescope in both directions, conserving $\sum_{i,j}U_{i,j}\Delta x\Delta y$ to floating-point roundoff.
+
+## Two-dimensional explicit diffusion
+
+The Cartesian diffusion solver applies the centred five-point Laplacian,
+
+$$
+L(U)_{i,j}=D\left(
+\frac{U_{i,j+1}-2U_{i,j}+U_{i,j-1}}{\Delta x^2}
++\frac{U_{i+1,j}-2U_{i,j}+U_{i-1,j}}{\Delta y^2}
+\right),
+$$
+
+with periodic indexing and forward Euler integration. The discrete maximum principle and linear stability require
+
+$$
+2D\Delta t\left(\frac{1}{\Delta x^2}+\frac{1}{\Delta y^2}\right)
+\leq C_{\mathrm{stab}},\qquad 0<C_{\mathrm{stab}}\leq1.
+$$
+
+The implementation also exposes the exact discrete amplification factor for a Fourier mode $(m_x,m_y)$, allowing the stencil and time update to be tested independently of the continuous analytical solution.
+
+On rectangular AMR patches, diffusion uses bilinear interpolation of synchronized or time-interpolated parent cell averages at fine ghost-cell centres. A ratio-$r$ child takes $r^2$ fine steps per root step. Diffusive x- and y-face fluxes are accumulated over those substeps and passed through the same face-averaged reflux operator used by 2D advection.
+
 ## Second-order linear advection
 
 The higher-order uniform solver reconstructs interface states with a piecewise-linear MUSCL profile. Its dimensionless slope is the monotonized-central value
@@ -130,6 +170,20 @@ U_e\leftarrow U_e+\frac{I_f-I_c}{\Delta x_c}.
 $$
 
 No correction is applied where the neighbouring parent cell is also covered by a fine patch, because that is a fine-fine rather than coarse-fine interface. The same logic is applied across the periodic domain boundary.
+
+### Two-dimensional synchronized update and refluxing
+
+The first rectangular 2D AMR evolution uses the finest-grid global timestep. Before either level advances, each fine patch receives one ghost layer on all four sides. A same-level sibling supplies a ghost wherever it covers that ghost-cell centre; all remaining values come from the periodic parent field. Root and fine patches then take one donor-cell step from the same old time, and fine block averages overwrite covered root cells.
+
+For refluxing, the fine flux density replacing one coarse face is the arithmetic mean of the $r$ aligned fine-face fluxes. On a vertical interface,
+
+$$
+\bar I_f^x=\frac{1}{r}\sum_{q=0}^{r-1}\Delta t F_{f,q}^x,
+$$
+
+with the analogous expression on horizontal faces. The neighboring uncovered coarse average receives $(I_c^x-\bar I_f^x)/\Delta x_c$ on a patch's left edge and the sign-reversed correction on its right edge; bottom and top use $\Delta y_c$. Corrections are skipped cell by cell when the neighboring parent cell is covered by another fine patch.
+
+For 2D temporal subcycling, the root takes one multidimensional CFL step while level one takes $r$ steps of size $\Delta t_c/r$. Parent values at fine substep $m$ are linearly interpolated between the old and provisional new root fields. The x- and y-face fine flux arrays are integrated across all substeps before face averaging and reflux correction.
 
 ## Inviscid Burgers' equation
 
